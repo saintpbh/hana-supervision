@@ -48,6 +48,41 @@ function NewReportContent() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [pastStates, setPastStates] = useState<ReportFormData[]>([]);
+  
+  // Save debounced history states for Undo
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPastStates((prev) => {
+        // Prevent saving consecutive identical states
+        if (prev.length === 0 || JSON.stringify(prev[prev.length - 1]) !== JSON.stringify(formData)) {
+          return [...prev.slice(-29), formData];
+        }
+        return prev;
+      });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [formData]);
+
+  const handleUndo = () => {
+    if (pastStates.length <= 1) {
+      alert("더 이상 되돌릴 수 있는 이전 상태가 없습니다.");
+      return;
+    }
+    // pop the current state (which is the last element because of debounce), and get the one before it
+    const newStates = [...pastStates];
+    if (JSON.stringify(newStates[newStates.length - 1]) === JSON.stringify(formData)) {
+      newStates.pop(); // remove current state if it matches formData
+    }
+    const targetState = newStates.pop();
+    if (targetState) {
+      setFormData(targetState);
+      autoSaveAll(targetState);
+      setPastStates(newStates);
+      alert("✅ 이전 상태로 복구되었습니다.");
+    }
+  };
+
   const SAVE_MSGS = [
     "✅ 안전하게 저장되었습니다",
     "💾 입력 내용이 저장되었습니다",
@@ -166,23 +201,56 @@ function NewReportContent() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleBulkUpdate(partialData: Record<string, any>) {
+    // Before major bulk update, snapshot immediately
+    setPastStates((prev) => {
+      if (prev.length === 0 || JSON.stringify(prev[prev.length - 1]) !== JSON.stringify(formData)) {
+        return [...prev.slice(-29), formData];
+      }
+      return prev;
+    });
+
     setFormData((prev) => {
       const next = { ...prev };
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mergeSafely = (target: any, source: any) => {
+        for (const key of Object.keys(source)) {
+          // 문서 업로드로 덮어씌울 때, 기존에 값이 있는 상태에서 빈 값("")으로 엎어치지 않도록 방어
+          if (source[key] !== undefined && source[key] !== null) {
+            if (typeof source[key] === 'string' && source[key].trim() === "" && target[key]) {
+              continue; // 기존에 값이 유지되도록 스킵
+            }
+            if (typeof source[key] === 'object' && !Array.isArray(source[key])) {
+               target[key] = { ...target[key] };
+               mergeSafely(target[key], source[key]);
+            } else {
+               target[key] = source[key];
+            }
+          }
+        }
+      };
+
       if (partialData.adminInfo) {
-        next.adminInfo = { ...prev.adminInfo, ...partialData.adminInfo };
+        next.adminInfo = { ...prev.adminInfo };
+        mergeSafely(next.adminInfo, partialData.adminInfo);
       }
       if (partialData.clientProfile) {
-        next.clientProfile = { ...prev.clientProfile, ...partialData.clientProfile };
+        next.clientProfile = { ...prev.clientProfile };
+        mergeSafely(next.clientProfile, partialData.clientProfile);
       }
       if (partialData.sct) {
-        next.testData = { ...next.testData, sct: { ...next.testData.sct, ...partialData.sct } };
+        next.testData = { ...next.testData, sct: { ...next.testData.sct } };
+        mergeSafely(next.testData.sct, partialData.sct);
       }
       if (partialData.mmpi2) {
-        next.testData = { ...next.testData, mmpi2: { ...next.testData.mmpi2, ...partialData.mmpi2 } };
+        next.testData = { ...next.testData, mmpi2: { ...next.testData.mmpi2 } };
+        mergeSafely(next.testData.mmpi2, partialData.mmpi2);
       }
       if (partialData.tci) {
-        next.testData = { ...next.testData, tci: { ...next.testData.tci, ...partialData.tci } };
+        next.testData = { ...next.testData, tci: { ...next.testData.tci } };
+        mergeSafely(next.testData.tci, partialData.tci);
       }
+      
       autoSaveAll(next);
       return next;
     });
@@ -468,9 +536,20 @@ function NewReportContent() {
 
           {/* Nav buttons */}
           <div className={styles.formNav}>
-            {step > 0 && (
-              <button className="btn btn-secondary" onClick={() => setStep(step - 1)}>← 이전 단계</button>
-            )}
+            <div style={{ display: "flex", gap: "var(--space-3)" }}>
+              {step > 0 && (
+                <button className="btn btn-secondary" onClick={() => setStep(step - 1)}>← 이전 단계</button>
+              )}
+              {pastStates.length > 1 && (
+                <button className="btn btn-outline" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }} onClick={handleUndo}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                    <path d="M3 7v6h6" />
+                    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3l-3 2.7" />
+                  </svg>
+                  되돌리기 (실행 취소)
+                </button>
+              )}
+            </div>
             <div className={styles.navRight}>
               {step < STEPS.length - 1 && (
                 <button className="btn btn-primary" onClick={() => setStep(step + 1)}>
