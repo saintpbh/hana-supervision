@@ -72,6 +72,9 @@ export async function POST(req: Request) {
     if (message.includes("401") || message.includes("403") || message.includes("API_KEY") || message.includes("invalid_api_key")) {
       return NextResponse.json({ status: "error", message: "API 키가 유효하지 않습니다", model: null });
     }
+    if (message.includes("not_found_error") || message.includes("404")) {
+      return NextResponse.json({ status: "error", message: "해당 모델에 접근할 수 없습니다. 새 API 키를 발급하거나 3.5를 선택해 주세요.", model: null });
+    }
     return NextResponse.json({ status: "error", message: message.slice(0, 100), model: null });
   }
 }
