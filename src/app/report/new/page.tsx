@@ -9,6 +9,8 @@ import {
 } from "@/types/report";
 import { SCT_QUESTIONS, MMPI2_SCALES } from "@/constants/report";
 import { getReport, saveReport, createNewReport } from "@/lib/reportStorage";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+import { saveAs } from "file-saver";
 
 const STEPS = [
   { title: "행정 정보", desc: "상담자, 기관, 슈퍼바이저" },
@@ -28,6 +30,9 @@ export default function NewReportPage() {
   const [formData, setFormData] = useState<ReportFormData>(INITIAL_FORM_DATA);
   const [loadingState, setLoadingState] = useState<{ title: string; desc: string } | null>(null);
   const [reportContent, setReportContent] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [tokenUsage, setTokenUsage] = useState<any>(null);
+  const [generationMode, setGenerationMode] = useState<string>("single");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,6 +154,7 @@ export default function NewReportPage() {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleBulkUpdate(partialData: Record<string, any>) {
     setFormData((prev) => {
       const next = { ...prev };
@@ -172,6 +178,7 @@ export default function NewReportPage() {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDocumentUpload = async (file: File, target: string, onParsed: (data: Record<string, any>) => void) => {
     if (!file) return;
     setLoadingState({
@@ -258,15 +265,43 @@ export default function NewReportPage() {
 
   /* ── AI generate ── */
   async function handleGenerate() {
-    setLoadingState({
-      title: "보고서 생성 중...",
-      desc: "Gemini AI가 입력하신 데이터를 분석하여\n슈퍼비전 보고서를 작성하고 있습니다."
-    });
     let aiInstructions = null;
     try {
       const stored = localStorage.getItem("hana_ai_instructions");
       if (stored) aiInstructions = JSON.parse(stored);
     } catch {}
+
+    const isMultiMode = aiInstructions?.orchestrationMode === "multi";
+    
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    if (isMultiMode) {
+      setLoadingState({
+        title: "에이전트 1: 구조 분석 중...",
+        desc: "Gemini AI가 원본 문서와 심리검사를 분석하고 있습니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+      });
+      let progressStep = 1;
+      intervalId = setInterval(() => {
+        progressStep++;
+        if (progressStep === 2) {
+          setLoadingState({
+            title: "에이전트 2: 임상 진단 중...",
+            desc: "GPT-4o가 DSM-5 기반 임상 진단 소견을 도출하고 있습니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+          });
+        } else if (progressStep === 4) {
+          setLoadingState({
+            title: "에이전트 3: 최종 서술 중...",
+            desc: "Claude가 진단을 통합하여 특수 지침이 반영된 슈퍼비전 보고서를 완성 중입니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+          });
+        }
+      }, 7000); 
+    } else {
+      setLoadingState({
+        title: "단일 모델 보고서 생성 중...",
+        desc: "AI가 입력하신 데이터를 분석하여\n슈퍼비전 보고서를 작성하고 있습니다."
+      });
+    }
+
     try {
       const res = await fetch("/api/generate-report", {
         method: "POST",
@@ -276,6 +311,9 @@ export default function NewReportPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "오류가 발생했습니다.");
       setReportContent(data.report);
+      if (data.usage) setTokenUsage(data.usage);
+      if (data.mode) setGenerationMode(data.mode);
+      
       localStorage.setItem("hana_report_draft", data.report);
       setLastSavedAt(nowTime());
       setSaveMessage("🎉 보고서가 생성되고 안전하게 저장되었습니다!");
@@ -285,23 +323,54 @@ export default function NewReportPage() {
       const message = err instanceof Error ? err.message : "오류가 발생했습니다.";
       alert(message);
     } finally {
+      if (intervalId) clearInterval(intervalId);
       setLoadingState(null);
     }
   }
 
   /* ── download ── */
-  function handleDownload() {
-    const blob = new Blob([reportContent], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+  async function handleDownload(format: "txt" | "docx" | "md") {
     const clientCode = formData.clientProfile.clientCode || "report";
     const date = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `슈퍼비전보고서_${clientCode}_${date}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const title = `슈퍼비전보고서_${clientCode}_${date}`;
+
+    if (format === "docx") {
+      const paragraphs = reportContent.split('\n').map(line => {
+        let isBold = false;
+        let pText = line;
+        let headingLevel = 0;
+
+        if (line.startsWith("### ")) {
+          headingLevel = 3; pText = line.replace("### ", ""); isBold = true;
+        } else if (line.startsWith("## ")) {
+          headingLevel = 2; pText = line.replace("## ", ""); isBold = true;
+        } else if (line.startsWith("# ")) {
+          headingLevel = 1; pText = line.replace("# ", ""); isBold = true;
+        }
+
+        return new Paragraph({
+          children: [
+            new TextRun({
+              text: pText,
+              font: "Malgun Gothic",
+              size: headingLevel === 1 ? 32 : headingLevel === 2 ? 28 : headingLevel === 3 ? 24 : 20,
+              bold: isBold
+            }),
+          ],
+          spacing: { after: 120 }
+        });
+      });
+
+      const doc = new Document({
+        sections: [{ children: paragraphs }],
+      });
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `${title}.docx`);
+    } else {
+      const mime = format === "txt" ? "text/plain;charset=utf-8" : "text/markdown;charset=utf-8";
+      const blob = new Blob([reportContent], { type: mime });
+      saveAs(blob, `${title}.${format}`);
+    }
   }
 
   /* ── report content change ── */
@@ -383,7 +452,8 @@ export default function NewReportPage() {
           )}
           {step === 4 && (
             <Step5Report reportContent={reportContent} onChange={handleReportChange}
-              onGenerate={handleGenerate} onDownload={handleDownload} isGenerating={!!loadingState} lastSavedAt={lastSavedAt} />
+              onGenerate={handleGenerate} onDownload={handleDownload} isGenerating={!!loadingState} lastSavedAt={lastSavedAt}
+              tokenUsage={tokenUsage} generationMode={generationMode} />
           )}
 
           {/* Nav buttons */}
@@ -416,8 +486,10 @@ function Step1Admin({
 }: {
   data: ReportFormData;
   onChange: (field: string, value: string) => void;
-  onFileUpload: (file: File, target: string, onParsed: (data: Record<string, unknown>) => void) => void;
-  onBulkUpdate: (partialData: Record<string, unknown>) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onFileUpload: (file: File, target: string, onParsed: (data: Record<string, any>) => void) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onBulkUpdate: (partialData: Record<string, any>) => void;
 }) {
   const d = data.adminInfo;
   const [isDragging, setIsDragging] = useState(false);
@@ -459,10 +531,10 @@ function Step1Admin({
 
       <div
         className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ""}`}
+        style={{ padding: "var(--space-6) var(--space-4)", minHeight: "100px", marginBottom: "var(--space-6)" }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
       >
         <input
           type="file"
@@ -471,13 +543,22 @@ function Step1Admin({
           accept=".pdf,.txt"
           onChange={handleFileSelect}
         />
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className={styles.dropzoneIcon}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className={styles.dropzoneIcon} style={{ width: "32px", height: "32px", marginBottom: "var(--space-2)" }}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
         </svg>
         <div>
-          <div className={styles.dropzoneTitle}>상담 일지 업로드 (자동 입력)</div>
-          <div className={styles.dropzoneSubtitle}>PDF나 TXT 파일을 드래그하거나 클릭하여 업로드하면 AI가 필드를 자동으로 채웁니다</div>
+          <div className={styles.dropzoneTitle} style={{ fontSize: "14px" }}>상담 일지 업로드 (자동 입력)</div>
+          <div className={styles.dropzoneSubtitle} style={{ fontSize: "13px" }}>
+            PDF나 TXT 파일을 드래그하거나 아래 버튼을 클릭하여 업로드하세요
+          </div>
         </div>
+        <button 
+          className="btn btn-outline" 
+          onClick={() => fileInputRef.current?.click()}
+          style={{ marginTop: "var(--space-3)", fontSize: "13px", padding: "6px 12px" }}
+        >
+          파일 선택하기
+        </button>
       </div>
 
       <div className="form-row">
@@ -655,7 +736,9 @@ function Step3Tests({
   onChangeMMPI2: (field: string, value: string) => void;
   onChangeMMPI2Scale: (scaleId: string, value: string) => void;
   onChangeTCI: (field: string, value: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onFileUpload: (file: File, target: string, onParsed: (data: Record<string, any>) => void) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onBulkUpdate: (partialData: Record<string, any>) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"sct" | "mmpi2" | "tci">("sct");
@@ -674,7 +757,7 @@ function Step3Tests({
     return (
       <div
         className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ""}`}
-        style={{ marginBottom: "var(--space-6)" }}
+        style={{ padding: "var(--space-6) var(--space-4)", minHeight: "100px", marginBottom: "var(--space-6)" }}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -683,7 +766,6 @@ function Step3Tests({
           const file = e.dataTransfer.files?.[0];
           if (file) processFile(file);
         }}
-        onClick={() => fileInputRef.current?.click()}
       >
         <input
           type="file"
@@ -692,13 +774,22 @@ function Step3Tests({
           accept=".pdf,.txt"
           onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
         />
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className={styles.dropzoneIcon}>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className={styles.dropzoneIcon} style={{ width: "32px", height: "32px", marginBottom: "var(--space-2)" }}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
         </svg>
         <div>
-          <div className={styles.dropzoneTitle}>{label} 문서 업로드 (AI 분석)</div>
-          <div className={styles.dropzoneSubtitle}>결과지 PDF/TXT를 드래그하거나 클릭하세요. AI가 수치를 자동으로 맵핑합니다.</div>
+          <div className={styles.dropzoneTitle} style={{ fontSize: "14px" }}>{label} 문서 업로드 (AI 분석)</div>
+          <div className={styles.dropzoneSubtitle} style={{ fontSize: "13px" }}>
+            결과지를 드래그하거나 아래 기능 버튼을 클릭하세요
+          </div>
         </div>
+        <button 
+          className="btn btn-outline" 
+          onClick={() => fileInputRef.current?.click()}
+          style={{ marginTop: "var(--space-3)", fontSize: "13px", padding: "6px 12px" }}
+        >
+          파일 선택하기
+        </button>
       </div>
     );
   };
@@ -956,13 +1047,18 @@ function Step5Report({
   onDownload,
   isGenerating,
   lastSavedAt,
+  tokenUsage,
+  generationMode,
 }: {
   reportContent: string;
   onChange: (content: string) => void;
   onGenerate: () => void;
-  onDownload: () => void;
+  onDownload: (format: "txt" | "docx" | "md") => void;
   isGenerating: boolean;
   lastSavedAt: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tokenUsage?: any;
+  generationMode?: string;
 }) {
   return (
     <>
@@ -996,18 +1092,27 @@ function Step5Report({
           </button>
 
           {reportContent && (
-            <button
-              className="btn btn-secondary"
-              onClick={onDownload}
-              style={{ display: "flex", alignItems: "center", gap: "6px" }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              다운로드 (.md)
-            </button>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => onDownload("docx")}
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                DOCX 형식
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => onDownload("txt")}
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                텍스트 파일 
+              </button>
+            </div>
           )}
         </div>
 
@@ -1051,6 +1156,41 @@ function Step5Report({
           </svg>
           <p style={{ fontSize: "16px", fontWeight: 500, marginBottom: "var(--space-2)" }}>아직 보고서가 생성되지 않았습니다</p>
           <p style={{ fontSize: "14px" }}>위의 &quot;AI 보고서 생성&quot; 버튼을 눌러 종합보고서를 작성하세요.</p>
+        </div>
+      )}
+
+      {/* Token Usage Metrics */}
+      {tokenUsage && (
+        <div style={{ marginTop: "var(--space-6)", padding: "var(--space-4)", backgroundColor: "rgba(0, 0, 0, 0.15)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-color)" }}>
+          <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "var(--space-3)", display: "flex", alignItems: "center", gap: "6px" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            AI 토큰 모니터링 {generationMode === "multi" ? "(멀티 에이전트)" : "(단일 모델)"}
+          </h3>
+          
+          {generationMode === "multi" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-3)" }}>
+              <div style={{ padding: "var(--space-3)", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-md)" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-primary)", fontWeight: 600, marginBottom: "4px" }}>Agent 1 (Gemini)</div>
+                <div style={{ fontSize: "13px" }}>Prompt: {tokenUsage.gemini?.prompt?.toLocaleString()}</div>
+                <div style={{ fontSize: "13px" }}>Completion: {tokenUsage.gemini?.completion?.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: "var(--space-3)", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-md)" }}>
+                <div style={{ fontSize: "12px", color: "#10a37f", fontWeight: 600, marginBottom: "4px" }}>Agent 2 (GPT-4o)</div>
+                <div style={{ fontSize: "13px" }}>Prompt: {tokenUsage.openai?.prompt?.toLocaleString()}</div>
+                <div style={{ fontSize: "13px" }}>Completion: {tokenUsage.openai?.completion?.toLocaleString()}</div>
+              </div>
+              <div style={{ padding: "var(--space-3)", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-md)" }}>
+                <div style={{ fontSize: "12px", color: "#d97757", fontWeight: 600, marginBottom: "4px" }}>Agent 3 (Claude)</div>
+                <div style={{ fontSize: "13px" }}>Prompt: {tokenUsage.claude?.prompt?.toLocaleString()}</div>
+                <div style={{ fontSize: "13px" }}>Completion: {tokenUsage.claude?.completion?.toLocaleString()}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: "var(--space-4)" }}>
+              <div style={{ fontSize: "13px" }}>사용된 프롬프트 토큰: <strong>{tokenUsage.prompt?.toLocaleString()}</strong></div>
+              <div style={{ fontSize: "13px" }}>생성된 텍스트 토큰: <strong>{tokenUsage.completion?.toLocaleString()}</strong></div>
+            </div>
+          )}
         </div>
       )}
     </>

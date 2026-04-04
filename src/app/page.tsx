@@ -1,30 +1,26 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
+import { getAllReports, SavedReport } from "@/lib/reportStorage";
 
 export default function Dashboard() {
-  const recentReports = [
-    {
-      id: "1",
-      clientCode: "C-2026-001",
-      theory: "정신역동",
-      status: "completed",
-      date: "2026-04-02",
-    },
-    {
-      id: "2",
-      clientCode: "C-2026-002",
-      theory: "인지행동(CBT)",
-      status: "completed",
-      date: "2026-04-01",
-    },
-    {
-      id: "3",
-      clientCode: "C-2026-003",
-      theory: "대상관계",
-      status: "draft",
-      date: "2026-03-30",
-    },
-  ];
+  const [reports, setReports] = useState<SavedReport[]>([]);
+
+  useEffect(() => {
+    setReports(getAllReports());
+    
+    const handleUpdate = () => {
+      setReports(getAllReports());
+    };
+    window.addEventListener("reports-updated", handleUpdate);
+    return () => window.removeEventListener("reports-updated", handleUpdate);
+  }, []);
+
+  const totalCount = reports.length;
+  const completedCount = reports.filter(r => r.reportContent.trim().length > 0).length;
+  const draftCount = totalCount - completedCount;
 
   return (
     <div className="animate-fade-in">
@@ -59,29 +55,22 @@ export default function Dashboard() {
           <div className={styles.metricIcon} data-color="primary">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           </div>
-          <div className={styles.metricValue}>12</div>
+          <div className={styles.metricValue}>{totalCount}</div>
           <div className={styles.metricLabel}>전체 보고서</div>
         </div>
         <div className={`card ${styles.metricCard}`}>
           <div className={styles.metricIcon} data-color="teal">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           </div>
-          <div className={styles.metricValue}>9</div>
+          <div className={styles.metricValue}>{completedCount}</div>
           <div className={styles.metricLabel}>완료됨</div>
         </div>
         <div className={`card ${styles.metricCard}`}>
           <div className={styles.metricIcon} data-color="warning">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
-          <div className={styles.metricValue}>3</div>
+          <div className={styles.metricValue}>{draftCount}</div>
           <div className={styles.metricLabel}>작성 중</div>
-        </div>
-        <div className={`card ${styles.metricCard}`}>
-          <div className={styles.metricIcon} data-color="purple">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          </div>
-          <div className={styles.metricValue}>4</div>
-          <div className={styles.metricLabel}>상담 이론</div>
         </div>
       </div>
 
@@ -89,40 +78,49 @@ export default function Dashboard() {
       <div className={`card animate-fade-in-delay ${styles.tableCard}`}>
         <div className={styles.tableHeader}>
           <h2 className="section-title">최근 보고서</h2>
-          <span className="badge badge-gray">{recentReports.length}건</span>
+          <span className="badge badge-gray">{reports.length}건</span>
         </div>
         <table className={styles.table}>
           <thead>
             <tr>
+              <th>진행 회기 번호</th>
               <th>내담자 코드</th>
-              <th>적용 이론</th>
               <th>상태</th>
               <th>작성일</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {recentReports.map((r) => (
-              <tr key={r.id}>
-                <td className={styles.codeCell}>{r.clientCode}</td>
-                <td>
-                  <span className="badge badge-primary">{r.theory}</span>
-                </td>
-                <td>
-                  <span
-                    className={`badge ${r.status === "completed" ? "badge-teal" : "badge-warning"}`}
-                  >
-                    {r.status === "completed" ? "완료" : "작성 중"}
-                  </span>
-                </td>
-                <td className={styles.dateCell}>{r.date}</td>
-                <td>
-                  <button className="btn btn-ghost" style={{ fontSize: "var(--text-xs)" }}>
-                    보기 →
-                  </button>
+            {reports.length > 0 ? reports.slice(0, 10).map((r) => {
+              const status = r.reportContent.trim().length > 0 ? "completed" : "draft";
+              return (
+                <tr key={r.id}>
+                  <td className={styles.codeCell}>{r.formData.sessionSummary.sessionNumber || "N/A"}</td>
+                  <td>
+                    <span className="badge badge-primary">{r.formData.clientProfile.clientCode || "미지정"}</span>
+                  </td>
+                  <td>
+                    <span
+                      className={`badge ${status === "completed" ? "badge-teal" : "badge-warning"}`}
+                    >
+                      {status === "completed" ? "완료" : "작성 중"}
+                    </span>
+                  </td>
+                  <td className={styles.dateCell}>{new Date(r.updatedAt).toLocaleDateString()}</td>
+                  <td>
+                    <Link href={`/report/new?id=${r.id}`} className="btn btn-ghost" style={{ fontSize: "var(--text-xs)" }}>
+                      보기 →
+                    </Link>
+                  </td>
+                </tr>
+              );
+            }) : (
+              <tr>
+                <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-8)" }}>
+                  <p style={{ color: "var(--color-text-muted)" }}>아직 작성된 보고서가 없습니다.</p>
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

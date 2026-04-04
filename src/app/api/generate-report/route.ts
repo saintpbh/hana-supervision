@@ -1,4 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import type { ReportFormData } from "@/types/report";
 import { THEORY_LABELS } from "@/types/report";
@@ -44,11 +46,14 @@ function formatMMPI(scales: Record<string, string>): string {
 
 interface AIInstructionsInput {
   apiKey?: string;
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
   model?: string;
   selectedTheories?: string[];
   direction?: string;
   transcriptDirection?: string;
   customPrompt?: string;
+  orchestrationMode?: string;
 }
 
 function buildPrompt(data: ReportFormData, ai: AIInstructionsInput | null): string {
@@ -137,23 +142,101 @@ export async function POST(request: NextRequest) {
     const aiInstructions: AIInstructionsInput | null = body.aiInstructions || null;
     const prompt = buildPrompt(formData, aiInstructions);
 
-    const apiKey = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API 키가 설정되지 않았습니다. 인공지능 설정에서 키를 입력하거나, 환경 변수를 설정하세요." },
-        { status: 400 }
-      );
+    if (aiInstructions?.orchestrationMode === "multi") {
+      // ===== MULTI-AGENT PIPELINE =====
+      // 1. Gemini: Data Parsing & Emotion Extraction
+      const geminiKey = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
+      const openaiKey = aiInstructions?.openaiApiKey || process.env.OPENAI_API_KEY;
+      const claudeKey = aiInstructions?.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
+
+      if (!geminiKey || !openaiKey || !claudeKey) {
+        throw new Error("멀티 에이전트 모드를 사용하려면 Gemini, OpenAI, Claude API 키가 모두 설정되어야 합니다.");
+      }
+
+      const tokens = {
+        gemini: { prompt: 0, completion: 0 },
+        openai: { prompt: 0, completion: 0 },
+        claude: { prompt: 0, completion: 0 },
+      };
+
+      // Step 1: Gemini
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const step1Prompt = `이 심리검사 데이터를 읽고 내담자의 핵심 감정단어, 방어기제 양상, 호소 문제의 이면을 500자 내외로 빠르게 파싱하여 요약해. \n\n데이터:\n${prompt}`;
+      const geminiRes = await geminiModel.generateContent(step1Prompt);
+      const step1Text = geminiRes.response.text();
+      tokens.gemini.prompt = geminiRes.response.usageMetadata?.promptTokenCount || 0;
+      tokens.gemini.completion = geminiRes.response.usageMetadata?.candidatesTokenCount || 0;
+
+      // Step 2: OpenAI (GPT-4o / GPT-4o-mini)
+      const openai = new OpenAI({ apiKey: openaiKey });
+      const step2Prompt = `당신은 정신과 전문의이자 임상심리전문가야. 다음 Gemini가 1차 파싱한 내담자 핵심 요약과, 원본 내담자 정보를 바탕으로 DSM-5 기반의 철저한 진단 소견과 이론(CBT, 대상관계 등)에 기반한 심층 사례개념화 초안을 작성해.\n\n[1차 추출 요약]\n${step1Text}\n\n[원본 지침 및 데이터]\n${prompt}`;
+      const gptRes = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // fallback to mini for speed, logic is still good
+        messages: [{ role: "user", content: step2Prompt }]
+      });
+      const step2Text = gptRes.choices[0]?.message?.content || "";
+      tokens.openai.prompt = gptRes.usage?.prompt_tokens || 0;
+      tokens.openai.completion = gptRes.usage?.completion_tokens || 0;
+
+      // Step 3: Claude (Sonnet 3.5)
+      const anthropic = new Anthropic({ apiKey: claudeKey });
+      const step3Prompt = `당신은 공감적이고 능숙한 수석 전문상담사. 다음 2단계의 이론적 진단 초안(GPT 생성)과 원본 데이터를 종합하여, 최종 '슈퍼비전 보고서 마크다운 양식'을 완벽하게 완성해줘. 기계적이지 않게 인간적이고 서술적으로 유려하게 작성해야 해. 반드시 요구된 출력 형식 지침과 마크다운 양식을 엄격히 지켜.\n\n[2단계 오케스트레이션 결과]\n${step2Text}\n\n[원본 지침 및 데이터]\n${prompt}`;
+      const claudeRes = await anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 8192,
+        messages: [{ role: "user", content: step3Prompt }]
+      });
+      // @ts-expect-error content types
+      const step3Text = claudeRes.content[0]?.text || "";
+      tokens.claude.prompt = claudeRes.usage.input_tokens || 0;
+      tokens.claude.completion = claudeRes.usage.output_tokens || 0;
+
+      return NextResponse.json({ report: step3Text, usage: tokens, mode: "multi" });
+
+    } else {
+      // ===== SINGLE AGENT PIPELINE =====
+      const customModel = aiInstructions?.model || "gemini-2.0-flash";
+      let text = "";
+      const tokenUsage = { prompt: 0, completion: 0 };
+
+      if (customModel.startsWith("gpt-")) {
+        const key = aiInstructions?.openaiApiKey || process.env.OPENAI_API_KEY;
+        if (!key) throw new Error("OpenAI API 키가 설정되지 않았습니다.");
+        const openai = new OpenAI({ apiKey: key });
+        const response = await openai.chat.completions.create({
+          model: customModel,
+          messages: [{ role: "user", content: prompt }]
+        });
+        text = response.choices[0]?.message?.content || "";
+        tokenUsage.prompt = response.usage?.prompt_tokens || 0;
+        tokenUsage.completion = response.usage?.completion_tokens || 0;
+      } else if (customModel.startsWith("claude-")) {
+        const key = aiInstructions?.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
+        if (!key) throw new Error("Anthropic API 키가 설정되지 않았습니다.");
+        const anthropic = new Anthropic({ apiKey: key });
+        const response = await anthropic.messages.create({
+          model: customModel,
+          max_tokens: 8192,
+          messages: [{ role: "user", content: prompt }]
+        });
+        // @ts-expect-error content types
+        text = response.content[0]?.text || "";
+        tokenUsage.prompt = response.usage.input_tokens || 0;
+        tokenUsage.completion = response.usage.output_tokens || 0;
+      } else {
+        const key = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
+        if (!key) throw new Error("Gemini API 키가 설정되지 않았습니다.");
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: customModel });
+        const result = await model.generateContent(prompt);
+        text = result.response.text();
+        tokenUsage.prompt = result.response.usageMetadata?.promptTokenCount || 0;
+        tokenUsage.completion = result.response.usageMetadata?.candidatesTokenCount || 0;
+      }
+
+      return NextResponse.json({ report: text, usage: tokenUsage, mode: "single" });
     }
-
-    const customModel = aiInstructions?.model || "gemini-2.0-flash";
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: customModel });
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    return NextResponse.json({ report: text });
   } catch (err: unknown) {
     console.error("Report generation error:", err);
     const message = err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.";

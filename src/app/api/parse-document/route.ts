@@ -1,26 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI, Schema, SchemaType } from "@google/generative-ai";
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { fileData, fileText, mimeType, aiInstructions, target = "admin" } = body;
 
-    const apiKey = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "API 키가 설정되지 않았습니다. 인공지능 설정에서 키를 입력하거나, 환경 변수를 설정하세요." },
-        { status: 400 }
-      );
-    }
-
-    if (!fileData && !fileText) {
-      return NextResponse.json({ error: "파일 데이터가 없습니다." }, { status: 400 });
-    }
-
     const customModel = aiInstructions?.model || "gemini-2.0-flash";
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: customModel });
 
     let prompt = "";
     let responseSchema: Schema = { type: SchemaType.OBJECT, properties: {} };
@@ -144,32 +132,100 @@ JSON 형식으로만 정확히 답변해주세요.
       };
     }
 
-    const parts: any[] = [{ text: prompt }];
+    const instructionAppend = "\n\n중요: 반드시 순수 JSON 객체 포맷으로만 응답하세요. ```json 등의 마크다운 백틱도 포함하지 마세요.";
+    prompt += instructionAppend;
 
-    if (fileText) {
-      parts.push({ text: `\n\n[문서 첨부 내용 시작]\n${fileText}\n[문서 첨부 내용 끝]\n` });
-    } else if (fileData) {
-      let cleanBase64 = fileData;
-      if (fileData.includes(",")) {
-        cleanBase64 = fileData.split(",")[1];
+    let responseText = "";
+
+    if (customModel.startsWith("gpt-")) {
+      const key = aiInstructions?.openaiApiKey || process.env.OPENAI_API_KEY;
+      if (!key) throw new Error("OpenAI API 키가 없습니다.");
+      const openai = new OpenAI({ apiKey: key });
+
+      const contentArr: any[] = [{ type: "text", text: prompt }];
+      if (fileText) {
+        contentArr.push({ type: "text", text: `[문서 첨부]\n${fileText}` });
+      } else if (fileData) {
+        let cleanBase64 = fileData;
+        if (fileData.includes(",")) cleanBase64 = fileData.split(",")[1];
+        if (mimeType === 'application/pdf') {
+          throw new Error("현재 선택하신 모델(ChatGPT)은 PDF 직접 이미지 파싱을 즉시 지원하지 않습니다. 텍스트로 변환해 올리거나 다른 AI 모델을 선택해주세요.");
+        } else {
+          contentArr.push({ type: "image_url", image_url: { url: `data:${mimeType || 'image/png'};base64,${cleanBase64}` } });
+        }
       }
-      parts.push({
-        inlineData: {
-          data: cleanBase64,
-          mimeType: mimeType || "application/pdf",
+
+      const response = await openai.chat.completions.create({
+        model: customModel,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: contentArr }]
+      });
+      responseText = response.choices[0]?.message?.content || "{}";
+
+    } else if (customModel.startsWith("claude-")) {
+      const key = aiInstructions?.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
+      if (!key) throw new Error("Anthropic API 키가 없습니다.");
+      const anthropic = new Anthropic({ apiKey: key });
+
+      const contentArr: any[] = [{ type: "text", text: prompt }];
+      if (fileText) {
+        contentArr.push({ type: "text", text: `[문서 첨부]\n${fileText}` });
+      } else if (fileData) {
+        let cleanBase64 = fileData;
+        if (fileData.includes(",")) cleanBase64 = fileData.split(",")[1];
+        if (mimeType === 'application/pdf') {
+          contentArr.push({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: cleanBase64 }
+          });
+        } else {
+          contentArr.push({
+            type: "image",
+            source: { type: "base64", media_type: mimeType || "image/png", data: cleanBase64 }
+          });
+        }
+      }
+
+      const response = await anthropic.messages.create({
+        model: customModel,
+        max_tokens: 4096,
+        messages: [{ role: "user", content: contentArr }]
+      });
+      // @ts-expect-error message content
+      responseText = response.content[0]?.text || "{}";
+      
+    } else {
+      const key = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
+      if (!key) throw new Error("Gemini API 키가 없습니다.");
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({ model: customModel });
+
+      const parts: any[] = [{ text: prompt }];
+      if (fileText) {
+        parts.push({ text: `\n\n[문서 첨부 내용 시작]\n${fileText}\n[문서 첨부 내용 끝]\n` });
+      } else if (fileData) {
+        let cleanBase64 = fileData;
+        if (fileData.includes(",")) {
+          cleanBase64 = fileData.split(",")[1];
+        }
+        parts.push({
+          inlineData: {
+            data: cleanBase64,
+            mimeType: mimeType || "application/pdf",
+          },
+        });
+      }
+
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: parts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
         },
       });
+      responseText = result.response.text();
     }
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: parts }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-      },
-    });
-
-    const responseText = result.response.text();
     let parsedData: Record<string, any> = {};
     try {
       parsedData = JSON.parse(responseText);
