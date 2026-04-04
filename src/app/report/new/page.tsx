@@ -239,7 +239,7 @@ export default function NewReportPage() {
             if (i < step) state = "completed";
             else if (i === step) state = "active";
             return (
-              <div key={i} className={`stepper-item ${state}`} onClick={() => i <= step && setStep(i)}>
+              <div key={i} className={`stepper-item ${state}`} onClick={() => setStep(i)}>
                 <div className="stepper-circle">
                   {i < step ? (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
