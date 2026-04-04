@@ -106,8 +106,10 @@ export default function AIInstructionsPage() {
                 style={{ width: "100%", padding: "var(--space-2) var(--space-3)", fontSize: "14px", height: "100%", cursor: "pointer", backgroundColor: "rgba(255, 255, 255, 0.05)" }}
               >
                 <optgroup label="Google Gemini">
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (최신/빠름)</option>
-                  <option value="gemini-2.0-flash">gemini-2.0-flash (권장)</option>
+                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro (최상위/실험)</option>
+                  <option value="gemini-3-flash-preview">gemini-3-flash (최신/강력함)</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (권장)</option>
+                  <option value="gemini-2.0-flash">gemini-2.0-flash (안정/빠름)</option>
                   <option value="gemini-1.5-pro">gemini-1.5-pro (안정/고성능)</option>
                 </optgroup>
                 <optgroup label="OpenAI ChatGPT">
