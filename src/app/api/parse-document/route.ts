@@ -4,7 +4,7 @@ import { GoogleGenerativeAI, Schema, SchemaType } from "@google/generative-ai";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fileData, mimeType, aiInstructions, target = "admin" } = body;
+    const { fileData, fileText, mimeType, aiInstructions, target = "admin" } = body;
 
     const apiKey = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!fileData) {
+    if (!fileData && !fileText) {
       return NextResponse.json({ error: "파일 데이터가 없습니다." }, { status: 400 });
     }
 
@@ -144,21 +144,25 @@ JSON 형식으로만 정확히 답변해주세요.
       };
     }
 
-    // Remove the data:mimeType;base64, prefix if it exists
-    let cleanBase64 = fileData;
-    if (fileData.includes(",")) {
-      cleanBase64 = fileData.split(",")[1];
+    const parts: any[] = [{ text: prompt }];
+
+    if (fileText) {
+      parts.push({ text: `\n\n[문서 첨부 내용 시작]\n${fileText}\n[문서 첨부 내용 끝]\n` });
+    } else if (fileData) {
+      let cleanBase64 = fileData;
+      if (fileData.includes(",")) {
+        cleanBase64 = fileData.split(",")[1];
+      }
+      parts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || "application/pdf",
+        },
+      });
     }
 
-    const inlineData = {
-      inlineData: {
-        data: cleanBase64,
-        mimeType: mimeType || "application/pdf",
-      },
-    };
-
     const result = await model.generateContent({
-      contents: [{ role: "user", parts: [inlineData, { text: prompt }] }],
+      contents: [{ role: "user", parts: parts }],
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,

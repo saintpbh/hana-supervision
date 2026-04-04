@@ -186,6 +186,41 @@ export default function NewReportPage() {
         if (stored) aiInstructions = JSON.parse(stored);
       } catch {}
 
+      if (file.type.startsWith("text/") || file.name.endsWith(".txt")) {
+        const arrayBuffer = await file.arrayBuffer();
+        let decodedText = "";
+        try {
+          decodedText = new TextDecoder("utf-8", { fatal: true }).decode(arrayBuffer);
+        } catch {
+          decodedText = new TextDecoder("euc-kr").decode(arrayBuffer);
+        }
+        
+        try {
+          const res = await fetch("/api/parse-document", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileText: decodedText,
+              mimeType: file.type || "text/plain",
+              aiInstructions,
+              target
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.parsedData) {
+            onParsed(data.parsedData);
+          } else {
+            alert(data.error || "분석에 실패했습니다.");
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "네트워크 오류";
+          alert(`분석 실패: ${message}`);
+        } finally {
+          setLoadingState(null);
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64Data = e.target?.result as string;
