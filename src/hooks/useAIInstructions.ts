@@ -6,7 +6,8 @@ export interface AIInstructions {
   openaiApiKey: string;
   anthropicApiKey: string;
   model: string;
-  selectedTheories: CounselingTheory[];
+  rolePersona: string;
+  counselingTheory: string;
   direction: string;
   transcriptDirection: string;
   customPrompt: string;
@@ -18,7 +19,8 @@ export const DEFAULT_AI_INSTRUCTIONS: AIInstructions = {
   openaiApiKey: "",
   anthropicApiKey: "",
   model: "gemini-2.0-flash",
-  selectedTheories: ["object_relations", "cbt"],
+  rolePersona: "한국심리학회 기준 1급 상담심리사이자 10년 이상의 임상 경력을 가진 '전문 상담 슈퍼바이저'입니다.",
+  counselingTheory: "정신역동, 대상관계 이론 및 인지행동치료(CBT)",
   direction: "내담자의 핵심 신념(Core Beliefs)과 방어기제를 깊이 있게 식별하고, 상담 내용의 표면적 의미를 넘어선 임상적 통찰을 제공해 주세요. 단정적 어투(~이다)보다는 가설적 어투(~일 수 있다, ~로 보입니다)를 지향하십시오.",
   transcriptDirection: "상담자의 공감적 반응, 반영 기법의 적절성 및 내담자의 비언어적 뉘앙스 변화에 주목하여 분석해 주세요.",
   customPrompt: "평가 시, 각 심리검사 지표들 간의 모순점이나 연관성을 적극적으로 교차 해석해야 합니다.",

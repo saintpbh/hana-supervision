@@ -17,17 +17,6 @@ export default function AIInstructionsPage() {
   const [aiTestStatus, setAiTestStatus] = useState<"idle" | "testing" | "success" | "warning" | "error">("idle");
   const [aiTestMessage, setAiTestMessage] = useState("");
 
-  const toggleTheory = (t: CounselingTheory) => {
-    setLocalData((prev) => {
-      const isSelected = prev.selectedTheories.includes(t);
-      if (isSelected) {
-        return { ...prev, selectedTheories: prev.selectedTheories.filter((th) => th !== t) };
-      } else {
-        return { ...prev, selectedTheories: [...prev.selectedTheories, t] };
-      }
-    });
-  };
-
   const handleSave = () => {
     saveInstructions(localData);
     setSavedMessage(true);
@@ -215,34 +204,28 @@ export default function AIInstructionsPage() {
           )}
         </div>
 
+        {/* 0. Role and Persona */}
+        <div style={{ marginBottom: "var(--space-8)" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>0. 인공지능 역할 및 퍼소나 (Role & Persona)</h2>
+          <p className="form-hint" style={{ marginBottom: "var(--space-3)" }}>인공지능이 갖추어야 할 전문가로서의 정체성과 역할을 정의하세요.</p>
+          <textarea
+            className="form-textarea"
+            value={localData.rolePersona || ""}
+            onChange={(e) => setLocalData({ ...localData, rolePersona: e.target.value })}
+            style={{ minHeight: "60px" }}
+          />
+        </div>
+
         {/* 1. Theory Selection */}
         <div style={{ marginBottom: "var(--space-8)" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>1. 기본 해석 이론 선택</h2>
-          <p className="form-hint" style={{ marginBottom: "var(--space-4)" }}>해석에 적용하고자 하는 심리상담 이론을 모두 선택하세요.</p>
-          <div className={styles.theoryGrid}>
-            {(Object.keys(THEORY_LABELS) as CounselingTheory[]).map((theory) => {
-              const isSelected = localData.selectedTheories.includes(theory);
-              return (
-                <div
-                  key={theory}
-                  className={`${styles.theoryCard} ${isSelected ? styles.theoryCardActive : ""}`}
-                  onClick={() => toggleTheory(theory)}
-                >
-                  <div className={styles.theoryHeader}>
-                    <div className={`${styles.theoryCheck} ${isSelected ? styles.theoryCheckActive : ""}`}>
-                      {isSelected && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className={styles.theoryTitle}>{THEORY_LABELS[theory]}</span>
-                  </div>
-                  <p className={styles.theoryDesc}>{THEORY_DESCRIPTIONS[theory]}</p>
-                </div>
-              );
-            })}
-          </div>
+          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>1. 기본 해석 이론 (편집 가능)</h2>
+          <p className="form-hint" style={{ marginBottom: "var(--space-4)" }}>해석에 적용하고자 하는 심리상담 이론을 입력하세요.</p>
+          <textarea
+            className="form-textarea"
+            value={localData.counselingTheory || ""}
+            onChange={(e) => setLocalData({ ...localData, counselingTheory: e.target.value })}
+            style={{ minHeight: "80px" }}
+          />
         </div>
 
         {/* 2. Directionality */}

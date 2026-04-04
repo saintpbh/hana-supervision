@@ -49,7 +49,8 @@ interface AIInstructionsInput {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   model?: string;
-  selectedTheories?: string[];
+  rolePersona?: string;
+  counselingTheory?: string;
   direction?: string;
   transcriptDirection?: string;
   customPrompt?: string;
@@ -57,17 +58,17 @@ interface AIInstructionsInput {
 }
 
 function buildPrompt(data: ReportFormData, ai: AIInstructionsInput | null): string {
-  const theories = ai?.selectedTheories || [];
-  const theoryNames = theories.map((t: string) => THEORY_LABELS[t as keyof typeof THEORY_LABELS]).join(", ") || "일반 심리상담";
+  const role = ai?.rolePersona || "한국심리학회 기준 1급 상담심리사이자 10년 이상의 임상 경력을 가진 '전문 상담 슈퍼바이저'입니다.";
+  const theory = ai?.counselingTheory || "전문 진단 및 일반 심리상담 이론";
   
   const sctFormatted = formatSCT(data.testData.sct.answers);
   const mmpiFormatted = formatMMPI(data.testData.mmpi2.scales);
 
-  return `당신은 최소 15년 이상의 임상 경험을 가진 전문 심리상담학 슈퍼바이저입니다.
+  return `당신은 ${role}
 당신은 다음의 [인공지능 지침]을 최우선으로 숙지한 후, 제공되는 상담 맥락과 심리분석 결과를 해석해야 합니다.
 
 ## [인공지능 지침]
-- 중점 적용 상담 이론: **${theoryNames}**
+- 중점 적용 상담 이론: **${theory}**
 - 사례 개념화 및 분석 방향: ${ai?.direction || "제공되지 않음"}
 - 축어록 요약 방향: ${ai?.transcriptDirection || "제공되지 않음"}
 - 추가 커스텀 지시사항: ${ai?.customPrompt || "제공되지 않음"}
@@ -119,7 +120,7 @@ ${mmpiFormatted}
 (제공된 상담 과정 요약 데이터를 보고서 형식으로 세련되게 정리. 축어록 요약 방향 지침을 적용하세요.)
 
 ### 4. 심리검사 결과 및 깊이 있는 해석
-([인공지능 지침]의 방향성과 선택된 이론(${theoryNames})을 적용하여 SCT, MMPI-2, TCI의 결과를 서로 교차-해석하세요.)
+([인공지능 지침]의 방향성과 선택된 이론(${theory})을 적용하여 SCT, MMPI-2, TCI의 결과를 서로 교차-해석하세요.)
 
 ### 5. 사례개념화 (Case Conceptualization)
 (선택된 이론별로 소제목을 달아 개별적인 사례개념화를 작성하세요. 다음 요소를 꼭 포함하세요: 핵심 감정/갈등, 방어기제/대처, 대인관계 패턴, 발달사적 관점)
