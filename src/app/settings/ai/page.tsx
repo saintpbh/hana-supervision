@@ -81,20 +81,27 @@ export default function AIInstructionsPage() {
             <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "single" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "single" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
               <input type="radio" name="orchestrationMode" value="single" checked={localData.orchestrationMode === "single"} onChange={() => setLocalData({ ...localData, orchestrationMode: "single" })} />
               <div>
-                <div style={{ fontWeight: 600 }}>단일 모델 모드 (Single Model)</div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>선택한 하나의 모델이 데이터 분석, 진단, 작성을 모두 처리합니다.</div>
+                <div style={{ fontWeight: 600 }}>단일 모델 모드</div>
+                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>선택한 모델 1개가 분석부터 작성까지 모두 처리합니다.</div>
+              </div>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "gemini-multi" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "gemini-multi" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
+              <input type="radio" name="orchestrationMode" value="gemini-multi" checked={localData.orchestrationMode === "gemini-multi"} onChange={() => setLocalData({ ...localData, orchestrationMode: "gemini-multi" })} />
+              <div>
+                <div style={{ fontWeight: 600 }}>싱글 AI 오케스트레이션 <span className="badge badge-blue" style={{ fontSize: "10px", backgroundColor: "rgba(59, 130, 246, 0.2)", color: "#93c5fd", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px" }}>NEW</span></div>
+                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Gemini 엔진 하나로 3명의 역할(분석/진단/작성)을 분담시켜 고품질 보고서를 작성합니다.</div>
               </div>
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "multi" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "multi" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
               <input type="radio" name="orchestrationMode" value="multi" checked={localData.orchestrationMode === "multi"} onChange={() => setLocalData({ ...localData, orchestrationMode: "multi" })} />
               <div>
-                <div style={{ fontWeight: 600 }}>멀티 에이전트 모드 (Multi-Agent) <span className="badge badge-purple" style={{ fontSize: "10px" }}>PRO</span></div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Gemini, ChatGPT, Claude가 협력하여 고품질의 심층 보고서를 작성합니다.</div>
+                <div style={{ fontWeight: 600 }}>3사 통합 멀티 에이전트 <span className="badge badge-purple" style={{ fontSize: "10px" }}>PRO</span></div>
+                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Gemini, ChatGPT, Claude 각각의 장점을 결합하여 릴레이로 분석/진단/작성합니다. (3사 API 키 필요)</div>
               </div>
             </label>
           </div>
 
-          {localData.orchestrationMode === "single" && (
+          {(localData.orchestrationMode === "single" || localData.orchestrationMode === "gemini-multi") && (
             <>
               <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>모델 선택 및 테스트</h2>
               <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "stretch", marginBottom: "var(--space-4)", flexWrap: "wrap" }}>

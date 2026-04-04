@@ -10,8 +10,8 @@ export interface AIInstructions {
   counselingTheory: string;
   direction: string;
   transcriptDirection: string;
-  customPrompt: string;
-  orchestrationMode: "single" | "multi";
+  customPrompt?: string;
+  orchestrationMode: "single" | "multi" | "gemini-multi";
 }
 
 export const DEFAULT_AI_INSTRUCTIONS: AIInstructions = {

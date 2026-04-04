@@ -195,6 +195,47 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ report: step3Text, usage: tokens, mode: "multi" });
 
+    } else if (aiInstructions?.orchestrationMode === "gemini-multi") {
+      // ===== SINGLE AI (GEMINI) MULTI-AGENT PIPELINE =====
+      const geminiKey = aiInstructions?.apiKey || process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        throw new Error("싱글 AI 오케스트레이션 모드를 사용하려면 Gemini API 키가 설정되어야 합니다.");
+      }
+
+      const customModel = aiInstructions?.model || "gemini-3.1-pro-preview";
+
+      const tokens = {
+        gemini: { prompt: 0, completion: 0 }
+      };
+
+      const genAI = new GoogleGenerativeAI(geminiKey);
+
+      // Step 1: Data Parser (Gemini 2.5 Flash for speed)
+      const parserModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const step1Prompt = `이 심리검사 데이터를 읽고 내담자의 핵심 감정단어, 방어기제 양상, 호소 문제의 이면을 500자 내외로 빠르게 파싱하여 요약해. \n\n데이터:\n${prompt}`;
+      const geminiRes1 = await parserModel.generateContent(step1Prompt);
+      const step1Text = geminiRes1.response.text();
+      tokens.gemini.prompt += geminiRes1.response.usageMetadata?.promptTokenCount || 0;
+      tokens.gemini.completion += geminiRes1.response.usageMetadata?.candidatesTokenCount || 0;
+
+      // Step 2: Clinical Diagnostician (User Selected Model)
+      const diagModel = genAI.getGenerativeModel({ model: customModel });
+      const step2Prompt = `당신은 정신과 전문의이자 임상심리전문가야. 다음 1차 파싱된 요약과 원본 데이터를 바탕으로 DSM-5 기반의 철저한 진단 소견과 심층 사례개념화 초안을 논리적으로 작성해.\n\n[1차 추출 요약]\n${step1Text}\n\n[원본 지침 및 데이터]\n${prompt}`;
+      const geminiRes2 = await diagModel.generateContent(step2Prompt);
+      const step2Text = geminiRes2.response.text();
+      tokens.gemini.prompt += geminiRes2.response.usageMetadata?.promptTokenCount || 0;
+      tokens.gemini.completion += geminiRes2.response.usageMetadata?.candidatesTokenCount || 0;
+
+      // Step 3: Senior Supervisor / Editor (User Selected Model)
+      const editorModel = genAI.getGenerativeModel({ model: customModel });
+      const step3Prompt = `당신은 공감적이고 능숙한 수석 전문상담사. 2단계의 이론적 진단 초안과 원본 데이터를 종합하여, 최종 '슈퍼비전 보고서 마크다운 양식'을 완벽하게 완성해줘. 기계적이지 않게 인간적이고 서술적으로 유려하게 작성해야 해. 반드시 요구된 출력 형식 지침과 마크다운 양식을 엄격히 지켜.\n\n[2단계 오케스트레이션 결과]\n${step2Text}\n\n[원본 지침 및 데이터]\n${prompt}`;
+      const geminiRes3 = await editorModel.generateContent(step3Prompt);
+      const step3Text = geminiRes3.response.text();
+      tokens.gemini.prompt += geminiRes3.response.usageMetadata?.promptTokenCount || 0;
+      tokens.gemini.completion += geminiRes3.response.usageMetadata?.candidatesTokenCount || 0;
+
+      return NextResponse.json({ report: step3Text, usage: tokens, mode: "gemini-multi" });
+
     } else {
       // ===== SINGLE AGENT PIPELINE =====
       const customModel = aiInstructions?.model || "gemini-2.0-flash";
