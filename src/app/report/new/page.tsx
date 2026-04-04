@@ -26,7 +26,7 @@ export default function NewReportPage() {
   const [reportId, setReportId] = useState<string | null>(reportIdParam);
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState<ReportFormData>(INITIAL_FORM_DATA);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [loadingState, setLoadingState] = useState<{ title: string; desc: string } | null>(null);
   const [reportContent, setReportContent] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export default function NewReportPage() {
     });
   }
 
-  function handleBulkUpdate(partialData: Partial<ReportFormData>) {
+  function handleBulkUpdate(partialData: Record<string, any>) {
     setFormData((prev) => {
       const next = { ...prev };
       if (partialData.adminInfo) {
@@ -158,14 +158,75 @@ export default function NewReportPage() {
       if (partialData.clientProfile) {
         next.clientProfile = { ...prev.clientProfile, ...partialData.clientProfile };
       }
+      if (partialData.sct) {
+        next.testData = { ...next.testData, sct: { ...next.testData.sct, ...partialData.sct } };
+      }
+      if (partialData.mmpi2) {
+        next.testData = { ...next.testData, mmpi2: { ...next.testData.mmpi2, ...partialData.mmpi2 } };
+      }
+      if (partialData.tci) {
+        next.testData = { ...next.testData, tci: { ...next.testData.tci, ...partialData.tci } };
+      }
       autoSaveAll(next);
       return next;
     });
   }
 
+  const handleDocumentUpload = async (file: File, target: string, onParsed: (data: Record<string, any>) => void) => {
+    if (!file) return;
+    setLoadingState({
+      title: "문서 분석 중...",
+      desc: "Gemini AI가 문서를 읽고 전문 정보를 추출하고 있습니다.\n잠시만 기다려주세요."
+    });
+
+    try {
+      let aiInstructions = null;
+      try {
+        const stored = localStorage.getItem("hana_ai_instructions");
+        if (stored) aiInstructions = JSON.parse(stored);
+      } catch {}
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Data = e.target?.result as string;
+        try {
+          const res = await fetch("/api/parse-document", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileData: base64Data,
+              mimeType: file.type,
+              aiInstructions,
+              target
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.parsedData) {
+            onParsed(data.parsedData);
+          } else {
+            alert(data.error || "분석에 실패했습니다.");
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "네트워크 오류";
+          alert(`분석 실패: ${message}`);
+        } finally {
+          setLoadingState(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      setLoadingState(null);
+      alert("파일을 읽는 중 오류가 발생했습니다.");
+    }
+  };
+
   /* ── AI generate ── */
   async function handleGenerate() {
-    setIsGenerating(true);
+    setLoadingState({
+      title: "보고서 생성 중...",
+      desc: "Gemini AI가 입력하신 데이터를 분석하여\n슈퍼비전 보고서를 작성하고 있습니다."
+    });
     let aiInstructions = null;
     try {
       const stored = localStorage.getItem("hana_ai_instructions");
@@ -189,7 +250,7 @@ export default function NewReportPage() {
       const message = err instanceof Error ? err.message : "오류가 발생했습니다.";
       alert(message);
     } finally {
-      setIsGenerating(false);
+      setLoadingState(null);
     }
   }
 
@@ -217,13 +278,15 @@ export default function NewReportPage() {
   /* ── rendering ── */
   return (
     <div className={styles.container}>
-      {isGenerating && (
+      {loadingState && (
         <div className="loading-overlay">
           <div className="loading-card">
             <div className="spinner" />
-            <div className="loading-title">보고서 생성 중...</div>
+            <div className="loading-title">{loadingState.title}</div>
             <div className="loading-desc">
-              Gemini AI가 입력하신 데이터를 분석하여<br />슈퍼비전 보고서를 작성하고 있습니다.
+              {loadingState.desc.split('\n').map((line, i) => (
+                <span key={i}>{line}<br /></span>
+              ))}
             </div>
           </div>
         </div>
@@ -275,16 +338,17 @@ export default function NewReportPage() {
       {/* Right: Form content */}
       <div className={styles.formPanel}>
         <div className={`card animate-fade-in ${styles.formCard}`} key={step}>
-          {step === 0 && <Step1Admin data={formData} onChange={updateAdmin} onBulkUpdate={handleBulkUpdate} />}
+          {step === 0 && <Step1Admin data={formData} onChange={updateAdmin} onFileUpload={handleDocumentUpload} onBulkUpdate={handleBulkUpdate} />}
           {step === 1 && <Step2Client data={formData} onChange={updateClient} />}
           {step === 2 && <Step4Session data={formData} onChange={updateSession} />}
           {step === 3 && (
             <Step3Tests data={formData} onChangeSCT={updateSCT} onChangeSCTAnswer={updateSCTAnswer}
-              onChangeMMPI2={updateMMPI2} onChangeMMPI2Scale={updateMMPI2Scale} onChangeTCI={updateTCI} />
+              onChangeMMPI2={updateMMPI2} onChangeMMPI2Scale={updateMMPI2Scale} onChangeTCI={updateTCI}
+              onFileUpload={handleDocumentUpload} onBulkUpdate={handleBulkUpdate} />
           )}
           {step === 4 && (
             <Step5Report reportContent={reportContent} onChange={handleReportChange}
-              onGenerate={handleGenerate} onDownload={handleDownload} isGenerating={isGenerating} lastSavedAt={lastSavedAt} />
+              onGenerate={handleGenerate} onDownload={handleDownload} isGenerating={!!loadingState} lastSavedAt={lastSavedAt} />
           )}
 
           {/* Nav buttons */}
@@ -312,15 +376,16 @@ export default function NewReportPage() {
 function Step1Admin({
   data,
   onChange,
+  onFileUpload,
   onBulkUpdate,
 }: {
   data: ReportFormData;
   onChange: (field: string, value: string) => void;
-  onBulkUpdate: (partialData: Partial<ReportFormData>) => void;
+  onFileUpload: (file: File, target: string, onParsed: (data: Record<string, unknown>) => void) => void;
+  onBulkUpdate: (partialData: Record<string, unknown>) => void;
 }) {
   const d = data.adminInfo;
   const [isDragging, setIsDragging] = useState(false);
-  const [isParsing, setIsParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -330,48 +395,10 @@ function Step1Admin({
   const handleDragLeave = () => setIsDragging(false);
 
   const processFile = async (file: File) => {
-    if (!file) return;
-    setIsParsing(true);
-    try {
-      let aiInstructions = null;
-      try {
-        const stored = localStorage.getItem("hana_ai_instructions");
-        if (stored) aiInstructions = JSON.parse(stored);
-      } catch {}
-
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Data = e.target?.result as string;
-        try {
-          const res = await fetch("/api/parse-document", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileData: base64Data,
-              mimeType: file.type,
-              aiInstructions,
-            }),
-          });
-          const data = await res.json();
-          if (data.success && data.parsedData) {
-            onBulkUpdate(data.parsedData);
-            alert("✅ 문서 분석 완료! 행정 정보와 내담자 정보가 입력되었습니다.");
-          } else {
-            alert(data.error || "분석에 실패했습니다.");
-          }
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : "네트워크 오류";
-          alert(`분석 실패: ${message}`);
-        } finally {
-          setIsParsing(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error(err);
-      setIsParsing(false);
-      alert("파일을 읽는 중 오류가 발생했습니다.");
-    }
+    onFileUpload(file, "admin", (parsedData) => {
+      onBulkUpdate(parsedData);
+      alert("✅ 문서 분석 완료! 행정 정보와 내담자 정보가 확인되었습니다.");
+    });
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -416,12 +443,6 @@ function Step1Admin({
           <div className={styles.dropzoneTitle}>상담 일지 업로드 (자동 입력)</div>
           <div className={styles.dropzoneSubtitle}>PDF나 TXT 파일을 드래그하거나 클릭하여 업로드하면 AI가 필드를 자동으로 채웁니다</div>
         </div>
-        {isParsing && (
-          <div className={styles.dropzoneOverlay}>
-            <div className="spinner" style={{ width: "24px", height: "24px", borderTopColor: "white" }}></div>
-            <div style={{ marginTop: "8px", fontSize: "14px", fontWeight: "500" }}>AI가 문서를 분석하고 있습니다...</div>
-          </div>
-        )}
       </div>
 
       <div className="form-row">
@@ -590,6 +611,8 @@ function Step3Tests({
   onChangeMMPI2,
   onChangeMMPI2Scale,
   onChangeTCI,
+  onFileUpload,
+  onBulkUpdate,
 }: {
   data: ReportFormData;
   onChangeSCT: (field: string, value: string) => void;
@@ -597,8 +620,53 @@ function Step3Tests({
   onChangeMMPI2: (field: string, value: string) => void;
   onChangeMMPI2Scale: (scaleId: string, value: string) => void;
   onChangeTCI: (field: string, value: string) => void;
+  onFileUpload: (file: File, target: string, onParsed: (data: Record<string, any>) => void) => void;
+  onBulkUpdate: (partialData: Record<string, any>) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"sct" | "mmpi2" | "tci">("sct");
+  
+  const TestDropzone = ({ target, label }: { target: "sct" | "mmpi2" | "tci", label: string }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const processFile = (file: File) => {
+      onFileUpload(file, target, (parsedData) => {
+        onBulkUpdate(parsedData);
+        alert(`✅ ${label} 문서 분석 및 입력 완료!`);
+      });
+    };
+
+    return (
+      <div
+        className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ""}`}
+        style={{ marginBottom: "var(--space-6)" }}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) processFile(file);
+        }}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          accept=".pdf,.txt"
+          onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])}
+        />
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className={styles.dropzoneIcon}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+        </svg>
+        <div>
+          <div className={styles.dropzoneTitle}>{label} 문서 업로드 (AI 분석)</div>
+          <div className={styles.dropzoneSubtitle}>결과지 PDF/TXT를 드래그하거나 클릭하세요. AI가 수치를 자동으로 맵핑합니다.</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -627,6 +695,7 @@ function Step3Tests({
       {/* SCT */}
       {activeTab === "sct" && (
         <div className="animate-fade-in">
+          <TestDropzone target="sct" label="SCT (문장완성검사)" />
           {SCT_QUESTIONS.map((section, idx) => (
             <div key={idx} style={{ marginBottom: "var(--space-6)" }}>
               <h3 className={styles.subSectionTitle}>{section.category}</h3>
@@ -661,6 +730,7 @@ function Step3Tests({
       {/* MMPI-2 */}
       {activeTab === "mmpi2" && (
         <div className="animate-fade-in">
+          <TestDropzone target="mmpi2" label="MMPI-2" />
            {MMPI2_SCALES.map((section, idx) => (
             <div key={idx} style={{ marginBottom: "var(--space-5)" }}>
               <h3 className={styles.subSectionTitle}>{section.category}</h3>
@@ -706,6 +776,7 @@ function Step3Tests({
       {/* TCI */}
       {activeTab === "tci" && (
         <div className="animate-fade-in">
+          <TestDropzone target="tci" label="TCI" />
           <p className="form-hint" style={{ marginBottom: "var(--space-5)" }}>
             기질 차원 4개와 성격 차원 3개의 T점수 또는 백분위를 입력하세요.
           </p>
