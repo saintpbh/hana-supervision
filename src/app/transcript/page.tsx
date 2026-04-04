@@ -19,6 +19,12 @@ export default function TranscriptPage() {
   const [history, setHistory] = useState<TranscriptRecord[]>([]);
   const [viewingRecord, setViewingRecord] = useState<TranscriptRecord | null>(null);
 
+  // Counselor Voice Recording State
+  const [counselorAudio, setCounselorAudio] = useState<Blob | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadHistory = async () => {
@@ -48,6 +54,43 @@ export default function TranscriptPage() {
     }
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Use standard webm for max browser compatibility, or fallback
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/mp4'; 
+      }
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        setCounselorAudio(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("마이크 접근 권한을 허용해주세요. (https 환경 필수)");
+      console.error(err);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
   const handleTranscribe = async () => {
     if (!file) return alert("오디오 파일을 선택해주세요.");
     if (!clientName) return alert("내담자명을 입력해주세요.");
@@ -67,6 +110,7 @@ export default function TranscriptPage() {
       const text = await transcribeAudio({
         apiKey,
         file,
+        counselorAudio: engine === "gemini" ? counselorAudio : null,
         instructions,
         engine,
         onProgress: (msg) => {
@@ -88,6 +132,7 @@ export default function TranscriptPage() {
       setStatus("done");
       setProgressMsg("");
       setFile(null);
+      setCounselorAudio(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       
       await loadHistory();
@@ -167,6 +212,55 @@ export default function TranscriptPage() {
               onChange={e => setInstructions(e.target.value)}
               style={{ minHeight: "100px" }}
             />
+          </div>
+
+          {/* Counselor Voice Registration (Optional) */}
+          <div style={{ marginBottom: "var(--space-6)" }}>
+            <label className="form-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>상담사 목소리 식별 등록 (선택)</span>
+              {engine === "whisper" && <span style={{ fontSize: "12px", color: "var(--color-error)", fontWeight: "normal" }}>Whisper 엔진은 미지원</span>}
+            </label>
+            <div style={{ 
+              background: engine === "whisper" ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)", 
+              padding: "var(--space-4)", 
+              borderRadius: "var(--radius-lg)", 
+              border: "1px solid var(--color-border)",
+              opacity: engine === "whisper" ? 0.5 : 1,
+              pointerEvents: engine === "whisper" ? "none" : "auto"
+            }}>
+              <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "var(--space-3)", lineHeight: 1.5 }}>
+                AI가 상담사 역할을 더 정확히 분류(Diarization)할 수 있도록 목소리 샘플을 남겨주세요. 아래 문장을 읽어주세요:<br/>
+                <strong style={{ color: "var(--color-text)", background: "rgba(0,0,0,0.2)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", marginTop: "8px" }}>
+                  &quot;안녕하세요, 저는 오늘 상담을 진행할 상담사입니다. 편안한 마음으로 이야기해 주시면 감사하겠습니다.&quot;
+                </strong>
+              </p>
+              
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}>
+                {!isRecording ? (
+                  <button type="button" className="btn btn-outline" onClick={startRecording} style={{ borderColor: 'var(--color-border)' }}>
+                    🎙️ 녹음 시작
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={stopRecording} style={{ background: "var(--color-error)", borderColor: "var(--color-error)" }}>
+                    ⏹ 녹음 정지 (녹음 중...)
+                  </button>
+                )}
+                
+                {counselorAudio && !isRecording && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", background: "rgba(0,0,0,0.3)", padding: "4px 12px", borderRadius: "20px" }}>
+                    <span style={{ fontSize: "16px" }}>✅</span>
+                    <audio 
+                      src={URL.createObjectURL(counselorAudio)} 
+                      controls 
+                      style={{ height: "30px", width: "200px" }}
+                    />
+                    <button type="button" style={{ background: "none", border: "none", color: "var(--color-error)", cursor: "pointer", marginLeft: "4px", fontSize: "12px", opacity: 0.8 }} onClick={() => setCounselorAudio(null)}>
+                      삭제
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div style={{ marginBottom: "var(--space-6)" }}>

@@ -1,14 +1,15 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 
 interface TranscribeOptions {
   apiKey: string;
   file: File;
+  counselorAudio?: Blob | null;
   instructions: string;
   engine: "gemini" | "whisper";
   onProgress?: (msg: string) => void;
 }
 
-export async function transcribeAudio({ apiKey, file, instructions, engine, onProgress }: TranscribeOptions): Promise<string> {
+export async function transcribeAudio({ apiKey, file, counselorAudio, instructions, engine, onProgress }: TranscribeOptions): Promise<string> {
   if (engine === "whisper") {
     if (file.size > 25 * 1024 * 1024) {
       throw new Error("Whisper API는 25MB 이하의 오디오 파일만 지원합니다.");
@@ -43,6 +44,7 @@ export async function transcribeAudio({ apiKey, file, instructions, engine, onPr
 
     onProgress?.("오디오 압축 및 프롬프트 준비 중...");
     
+    // Convert main session audio
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -53,21 +55,52 @@ export async function transcribeAudio({ apiKey, file, instructions, engine, onPr
       reader.readAsDataURL(file);
     });
 
+    // Convert counselor sample audio if exists
+    let counselorBase64 = null;
+    let counselorMimeType = "";
+    if (counselorAudio) {
+      counselorBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(counselorAudio);
+      });
+      counselorMimeType = counselorAudio.type;
+    }
+
     onProgress?.("Gemini 서버로 분석 요청 및 변환 중 (수 분이 소요될 수 있습니다)...");
     
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
 
-    const systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 첨부된 상담 오디오를 처음부터 끝까지 빠짐없이 들어보고 매우 정확한 텍스트 축어록을 작성하세요.
+    let systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 첨부된 상담 오디오를 처음부터 끝까지 빠짐없이 들어보고 매우 정확한 텍스트 축어록을 작성하세요.
     - 화자는 반드시 상담사는 "상1:", 내담자는 "내1:" 로 표기하세요.
     - 화자가 중간에 침묵하거나 대화가 비는 구간(3초 이상)은 반드시 "(...)" 로 표기하세요.
     - 아래 추가 지침을 반드시 준수하세요:
     ${instructions}`;
 
-    const result = await model.generateContent([
-      systemPrompt,
-      { inlineData: { data: base64Data, mimeType: file.type } }
-    ]);
+    const parts: Part[] = [];
+    
+    // If we have counselor sample, instruct the AI
+    if (counselorBase64) {
+      systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 두 개의 오디오 파일이 차례로 제공됩니다.
+첫 번째 오디오 파일은 '상담사(상1)' 본인의 목소리 기준 샘플 파일입니다. 
+두 번째 오디오 파일이 실제 상담 본편입니다.
+반드시 첫 번째 샘플 오디오 파일의 목소리를 기준으로, 본 상담 오디오 파일 내의 화자를 구분(Diarization)하여 매우 정확한 텍스트 축어록을 작성하세요.
+- 첫번째 목소리와 일치하는 화자는 "상1:", 다른 화자는 "내1:" 로 표기하세요.
+- 화자가 중간에 침묵하거나 대화가 비는 구간(3초 이상)은 반드시 "(...)" 로 표기하세요.
+- 추가 지침:
+${instructions}`;
+      parts.push({ inlineData: { data: counselorBase64, mimeType: counselorMimeType } });
+    }
+
+    parts.push({ inlineData: { data: base64Data, mimeType: file.type } });
+    parts.unshift({ text: systemPrompt });
+
+    const result = await model.generateContent(parts);
 
     return result.response.text();
   }
