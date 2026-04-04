@@ -13,6 +13,7 @@
     "@google/generative-ai": "^0.24.1",
     "docx": "^9.6.1",
     "file-saver": "^2.0.5",
+    "idb-keyval": "^6.2.2",
     "next": "16.2.2",
     "openai": "^6.33.0",
     "react": "19.2.4",
