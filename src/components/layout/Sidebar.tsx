@@ -32,7 +32,17 @@ const navItems = [
   },
 ];
 
+import { Suspense } from "react";
+
 export function Sidebar() {
+  return (
+    <Suspense fallback={<div className={styles.sidebar}>Loading nav...</div>}>
+      <SidebarContent />
+    </Suspense>
+  );
+}
+
+function SidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const [reports, setReports] = useState<SavedReport[]>([]);

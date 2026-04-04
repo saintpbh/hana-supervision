@@ -20,7 +20,17 @@ const STEPS = [
   { title: "종합보고서", desc: "AI 생성 및 편집" },
 ];
 
+import { Suspense } from "react";
+
 export default function NewReportPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>}>
+      <NewReportContent />
+    </Suspense>
+  );
+}
+
+function NewReportContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const reportIdParam = searchParams.get("id");
