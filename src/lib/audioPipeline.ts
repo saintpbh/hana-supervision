@@ -37,49 +37,26 @@ export async function transcribeAudio({ apiKey, file, instructions, engine, onPr
   } 
   
   if (engine === "gemini") {
-    // 1. Upload to Gemini File API manually via REST since GoogleAIFileManager is Node-only
-    onProgress?.("Gemini 서버로 오디오 파일 업로드 중 (최대 2GB)...");
-    
-    // First, init resumable upload
-    const initRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=resumable&key=${apiKey}`, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": file.size.toString(),
-        "X-Goog-Upload-Header-Content-Type": file.type,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ file: { display_name: file.name } })
-    });
-
-    if (!initRes.ok) {
-      const err = await initRes.json();
-      throw new Error("Gemini 업로드 초기화 실패: " + (err.error?.message || "알 수 없는 에러"));
+    if (file.size > 20 * 1024 * 1024) {
+      throw new Error("보안 정책 및 브라우저 전송 한계로 인해, 현재 브라우저 직접 변환은 20MB 미만의 파일만 지원합니다. 큰 비디오 파일은 음성(mp3, m4a 등)으로 변환 후 업로드해주세요.");
     }
 
-    const uploadUrl = initRes.headers.get("X-Goog-Upload-URL");
-    if (!uploadUrl) throw new Error("업로드 URL을 찾을 수 없습니다.");
-
-    // Upload bytes
-    const uploadRes = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "Content-Length": file.size.toString(),
-        "X-Goog-Upload-Offset": "0",
-        "X-Goog-Upload-Command": "upload, finalize"
-      },
-      body: file
+    onProgress?.("오디오 압축 및 프롬프트 준비 중...");
+    
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(",")[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
 
-    if (!uploadRes.ok) throw new Error("오디오 본문 업로드에 실패했습니다.");
-    const fileInfo = await uploadRes.json();
-    const fileUri = fileInfo.file.uri;
-
-    onProgress?.("업로드 완료! 축어록 분석 및 변환 중 (수 분의 시간이 소요될 수 있습니다)...");
+    onProgress?.("Gemini 서버로 분석 요청 및 변환 중 (수 분이 소요될 수 있습니다)...");
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // best for transcription
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
 
     const systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 첨부된 상담 오디오를 처음부터 끝까지 빠짐없이 들어보고 매우 정확한 텍스트 축어록을 작성하세요.
     - 화자는 반드시 상담사는 "상1:", 내담자는 "내1:" 로 표기하세요.
@@ -89,7 +66,7 @@ export async function transcribeAudio({ apiKey, file, instructions, engine, onPr
 
     const result = await model.generateContent([
       systemPrompt,
-      { fileData: { fileUri: fileUri, mimeType: fileInfo.file.mimeType } }
+      { inlineData: { data: base64Data, mimeType: file.type } }
     ]);
 
     return result.response.text();
