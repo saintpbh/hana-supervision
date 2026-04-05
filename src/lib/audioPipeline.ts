@@ -122,7 +122,7 @@ export async function transcribeAudio({ apiKey, file, counselorAudio, instructio
     onProgress?.("Gemini 서버로 분석 요청 및 변환 중 (수 분이 소요될 수 있습니다)...");
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const modelName = engine === "gemini-pro" ? "gemini-1.5-pro" : "gemini-2.5-flash";
+    const modelName = engine === "gemini-pro" ? "gemini-1.5-pro" : "gemini-3.0-flash";
     const model = genAI.getGenerativeModel({ model: modelName }); 
 
     let systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 첨부된 상담 오디오를 처음부터 끝까지 빠짐없이 들어보고 매우 정확한 텍스트 축어록을 작성하세요.

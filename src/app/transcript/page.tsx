@@ -260,8 +260,8 @@ export default function TranscriptPage() {
                   </div>
                   <span style={{ fontSize: "20px" }}>🧠</span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini" ? "#fff" : "#cbd5e1" }}>Gemini 2.5 Flash</div>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>무제한 용량 처리, 압도적 문맥 파악 구조</div>
+                <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini" ? "#fff" : "#cbd5e1" }}>Gemini 3.0 Flash <span className="badge badge-purple" style={{ background: "#8b5cf6", fontSize: "10px", marginLeft: "4px" }}>NEW</span></div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>최신 멀티모달 최적화, 압도적인 반응속도 및 성능 업그레이드</div>
               </label>
 
               <label className={`engine-card ${engine === "gemini-pro" ? "gemini-pro-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "gemini-pro" ? "rgba(236, 72, 153, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
