@@ -226,27 +226,27 @@ export default function TranscriptPage() {
         <div className="glass-card" style={{ flex: "1 1 65%", display: "flex", flexDirection: "column", gap: "24px", padding: "32px" }}>
           <div>
             <h1 style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.5px", margin: "0 0 8px 0", background: "linear-gradient(to right, #fff, #94a3b8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Audio Processing
+              음성 축어록 변환
             </h1>
             <p style={{ color: "#94a3b8", fontSize: "15px", margin: 0 }}>
-              Convert counseling sessions into pristine, speaker-separated transcripts.
+              상담 녹음 파일을 화자가 분리된 깔끔한 축어록으로 변환하세요.
             </p>
           </div>
 
           <div style={{ display: "flex", gap: "24px" }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Client Name</label>
-              <input type="text" className="input-text premium-input" placeholder="e.g. Hong Gil-dong" value={clientName} onChange={e => setClientName(e.target.value)} />
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>내담자 이름</label>
+              <input type="text" className="input-text premium-input" placeholder="예: 홍길동" value={clientName} onChange={e => setClientName(e.target.value)} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Date</label>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>상담 일자</label>
               <input type="date" className="input-text premium-input" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
             </div>
           </div>
 
           {/* Engine Selection */}
           <div>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "12px" }}>AI Engine Model</label>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "12px" }}>AI 모델 명</label>
             <div style={{ display: "flex", gap: "16px" }}>
               <label className={`engine-card ${engine === "gemini" ? "gemini-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "gemini" ? "rgba(168, 85, 247, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
                 <input type="radio" value="gemini" checked={engine === "gemini"} onChange={() => setEngine("gemini")} style={{ display: "none" }} />
@@ -257,7 +257,7 @@ export default function TranscriptPage() {
                   <span style={{ fontSize: "20px" }}>🧠</span>
                 </div>
                 <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini" ? "#fff" : "#cbd5e1" }}>Gemini 2.5 Flash</div>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>Unlimited size, High Accuracy, Context-aware</div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>무제한 용량 처리, 압도적 문맥 파악 구조</div>
               </label>
 
               <label className={`engine-card ${engine === "whisper" ? "whisper-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "whisper" ? "rgba(6, 182, 212, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
@@ -269,7 +269,7 @@ export default function TranscriptPage() {
                   <span style={{ fontSize: "20px" }}>🎙️</span>
                 </div>
                 <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "whisper" ? "#fff" : "#cbd5e1" }}>Whisper v3 <span className="badge badge-purple" style={{ fontSize: "10px", marginLeft: "4px" }}>PRO</span></div>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>Max 25MB, Robust, Large Vocabulary</div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>높은 정확도 (20MB 미만 짧은 대화용)</div>
               </label>
             </div>
           </div>
@@ -277,10 +277,10 @@ export default function TranscriptPage() {
           <div style={{ display: "flex", gap: "24px" }}>
             {/* Instructions */}
             <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Custom Instructions</label>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>추가 요청 (지시사항)</label>
               <textarea
                 className="form-textarea premium-input"
-                placeholder="e.g. Note any emotional pauses in brackets like [Crying]."
+                placeholder="예시: 감정적인 침묵, 행동은 (울음) 처럼 괄호 안에 표기하세요."
                 value={instructions}
                 onChange={e => setInstructions(e.target.value)}
                 style={{ minHeight: "140px", resize: "none" }}
@@ -290,8 +290,8 @@ export default function TranscriptPage() {
             {/* Voice Registration */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>
-                <span>Voice Registration (Diarization)</span>
-                {engine === "whisper" && <span style={{ fontSize: "11px", color: "#ef4444" }}>Not supported in Whisper</span>}
+                <span>상담사 목소리 프로필 등록 (화자 분리)</span>
+                {engine === "whisper" && <span style={{ fontSize: "11px", color: "#ef4444" }}>*Whisper 모드 지원 불가</span>}
               </label>
               
               <div style={{ 
@@ -331,19 +331,19 @@ export default function TranscriptPage() {
                         </svg>
                       </button>
                       <div style={{ fontSize: "14px", fontWeight: 500, color: isRecording ? "#f472b6" : "#cbd5e1" }}>
-                        {isRecording ? "Recording..." : "Add Voice Profile"}
+                        {isRecording ? "음성을 수집 중입니다..." : "내 목소리 데이터 저장"}
                       </div>
-                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>Read a 10s intro sentence</div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>10초 내외의 인사말 텍스트를 읽어 주세요</div>
                     </>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                       <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(16, 185, 129, 0.2)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                       </div>
-                      <div style={{ fontSize: "13px", fontWeight: 500, color: "#10b981" }}>Profile Registered</div>
+                      <div style={{ fontSize: "13px", fontWeight: 500, color: "#10b981" }}>사전 분석이 완료되었습니다</div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <audio src={URL.createObjectURL(counselorAudio)} controls style={{ height: "24px", width: "120px", display: "none" }} />
-                        <button type="button" onClick={() => setCounselorAudio(null)} style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "4px 12px", borderRadius: "4px", fontSize: "12px", cursor: "pointer" }}>Remove</button>
+                        <button type="button" onClick={() => setCounselorAudio(null)} style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "4px 12px", borderRadius: "4px", fontSize: "12px", cursor: "pointer" }}>초기화</button>
                       </div>
                     </div>
                   )}
@@ -353,7 +353,7 @@ export default function TranscriptPage() {
           </div>
 
           <div style={{}}>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Audio File Upload</label>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>대용량 오디오 첨부</label>
             <div style={{ background: "rgba(0,0,0,0.2)", border: "1px dashed rgba(255,255,255,0.2)", padding: "24px", borderRadius: "12px", textAlign: "center", position: "relative", transition: "all 0.2s" }}>
               <input
                 type="file" accept="audio/*" ref={fileInputRef} onChange={handleFileChange}
@@ -373,8 +373,8 @@ export default function TranscriptPage() {
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontWeight: 500, color: "#e2e8f0", fontSize: "14px" }}>Drag & Drop or Click to Browse</div>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>MP3, M4A, WAV (Max 20MB directly recommended)</div>
+                    <div style={{ fontWeight: 500, color: "#e2e8f0", fontSize: "14px" }}>직접 드래그 하거나 클릭을 해 폴더에서 선택하세요</div>
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>mp3, m4a 등 확장자 지원 (최대 등록 용량: 20MB)</div>
                   </div>
                 )}
               </div>
@@ -405,14 +405,14 @@ export default function TranscriptPage() {
             disabled={!file || status === "uploading" || status === "transcribing" || (engine === "whisper" && file && file.size > 25 * 1024 * 1024)}
             style={{ width: "100%", height: "48px", fontSize: "15px", fontWeight: 600, background: "linear-gradient(to right, #7e22ce, #db2777)", border: "none", marginTop: "auto" }}
           >
-            {status === "uploading" || status === "transcribing" ? "Processing..." : "Generate Transcript"}
+            {status === "uploading" || status === "transcribing" ? "변환이 진행되고 있습니다..." : "음성 파일 분석 시작하기"}
           </button>
         </div>
 
         {/* Right Column: History */}
         <div style={{ flex: "1 1 35%", display: "flex", flexDirection: "column", gap: "16px" }}>
           <div>
-            <h2 style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 16px 0", color: "#f8fafc" }}>Transcription History</h2>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 16px 0", color: "#f8fafc" }}>기존 저장 내역</h2>
           </div>
           
           {viewingRecord ? (
@@ -485,13 +485,13 @@ export default function TranscriptPage() {
               <button 
                 onClick={() => setViewingRecord(null)}
                 style={{ marginTop: "16px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", padding: "10px", borderRadius: "8px", cursor: "pointer", fontSize: "13px" }}
-              >← Back to History</button>
+              >← 히스토리 목록 되돌아가기</button>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {history.length === 0 ? (
                 <div className="glass-card" style={{ padding: "40px 24px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
-                  No transcriptions yet.
+                  아직 생성된 축어록 파일이 존재하지 않습니다.
                 </div>
               ) : (
                 history.map(record => (
@@ -504,14 +504,14 @@ export default function TranscriptPage() {
                         <div style={{ color: "#f8fafc", fontWeight: 500, fontSize: "14px", marginBottom: "4px" }}>{record.clientName}_{record.sessionDate}.txt</div>
                         <div style={{ display: "flex", gap: "12px", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#10b981", background: "rgba(16, 185, 129, 0.1)", padding: "2px 8px", borderRadius: "10px" }}>
-                            <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#10b981" }} /> Completed
+                            <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#10b981" }} /> 열람 가능
                           </span>
                           <span>{record.engine}</span>
                         </div>
                       </div>
                     </div>
                     <button style={{ background: "linear-gradient(135deg, #06b6d4, #3b82f6)", border: "none", color: "#fff", padding: "6px 16px", borderRadius: "20px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-                      View
+                      상세 데이터 읽기
                     </button>
                   </div>
                 ))
