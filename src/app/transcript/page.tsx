@@ -8,7 +8,7 @@ export default function TranscriptPage() {
   
   // State
   const [clientName, setClientName] = useState("");
-  const [sessionDate, setSessionDate] = useState(new Date().toISOString().split("T")[0]);
+  const [sessionDate, setSessionDate] = useState("");
   const [engine, setEngine] = useState<"gemini" | "whisper">("gemini");
   const [instructions, setInstructions] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -34,8 +34,13 @@ export default function TranscriptPage() {
 
   // Load Instructions and History
   useEffect(() => {
+    setSessionDate(new Date().toISOString().split("T")[0]);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const savedInst = localStorage.getItem("hana_transcript_inst");
-    if (savedInst) setInstructions(savedInst);
+    if (savedInst) {
+      setInstructions(savedInst);
+    }
     
     loadHistory();
   }, []);
@@ -161,140 +166,215 @@ export default function TranscriptPage() {
   };
 
   return (
-    <div className="page-container" style={{ display: "flex", gap: "var(--space-6)" }}>
-      {/* Left Column: Form */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-        <div className="card">
-          <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "var(--space-2)" }}>음성 축어록 변환</h1>
-          <p style={{ color: "var(--color-text-muted)", marginBottom: "var(--space-6)" }}>
-            상담 오디오를 업로드하면 자동으로 상담사(상1)/내담자(내1)로 분류된 축어록을 생성합니다.
-          </p>
+    <div style={{
+      minHeight: "100%", width: "100%", padding: "var(--space-6)", color: "#e2e8f0",
+      background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+      borderRadius: "16px",
+      position: "relative"
+    }}>
+      <style>{`
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+          70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(168, 85, 247, 0); }
+          100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        .mic-active {
+          animation: pulse-ring 2s infinite cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .glass-card {
+          background: rgba(255, 255, 255, 0.03);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+          border-radius: 16px;
+        }
+        .engine-card {
+          transition: all 0.3s ease;
+          position: relative;
+          overflow: hidden;
+        }
+        .engine-card.gemini-active {
+          border-color: #a855f7;
+          box-shadow: 0 0 20px rgba(168, 85, 247, 0.2), inset 0 0 20px rgba(168, 85, 247, 0.1);
+        }
+        .engine-card.whisper-active {
+          border-color: #06b6d4;
+          box-shadow: 0 0 20px rgba(6, 182, 212, 0.2), inset 0 0 20px rgba(6, 182, 212, 0.1);
+        }
+        .history-item {
+          transition: all 0.2s ease;
+        }
+        .history-item:hover {
+          background: rgba(255, 255, 255, 0.08) !important;
+          transform: translateY(-2px);
+        }
+        .premium-input {
+          background: rgba(0, 0, 0, 0.2) !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          color: #fff !important;
+          transition: border-color 0.2s;
+        }
+        .premium-input:focus {
+          border-color: rgba(255, 255, 255, 0.3) !important;
+          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05) !important;
+        }
+      `}</style>
+      <div style={{ maxWidth: "1200px", margin: "0 auto", display: "flex", gap: "32px", alignItems: "flex-start" }}>
+        
+        {/* Left Column: Form */}
+        <div className="glass-card" style={{ flex: "1 1 65%", display: "flex", flexDirection: "column", gap: "24px", padding: "32px" }}>
+          <div>
+            <h1 style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.5px", margin: "0 0 8px 0", background: "linear-gradient(to right, #fff, #94a3b8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              Audio Processing
+            </h1>
+            <p style={{ color: "#94a3b8", fontSize: "15px", margin: 0 }}>
+              Convert counseling sessions into pristine, speaker-separated transcripts.
+            </p>
+          </div>
 
-          <div style={{ display: "flex", gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
+          <div style={{ display: "flex", gap: "24px" }}>
             <div style={{ flex: 1 }}>
-              <label className="form-label">내담자명 (가명)</label>
-              <input type="text" className="input-text" placeholder="예: 홍길동" value={clientName} onChange={e => setClientName(e.target.value)} />
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Client Name</label>
+              <input type="text" className="input-text premium-input" placeholder="e.g. Hong Gil-dong" value={clientName} onChange={e => setClientName(e.target.value)} />
             </div>
             <div style={{ flex: 1 }}>
-              <label className="form-label">상담 일자</label>
-              <input type="date" className="input-text" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Date</label>
+              <input type="date" className="input-text premium-input" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
             </div>
           </div>
 
-          <div style={{ marginBottom: "var(--space-6)" }}>
-            <label className="form-label">엔진 및 품질 옵션 선택</label>
-            <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
-              <label style={{ flex: 1, display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: engine === "gemini" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: engine === "gemini" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
-                <input type="radio" name="engine" value="gemini" checked={engine === "gemini"} onChange={() => setEngine("gemini")} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>일반 축어록 (Gemini 2.5 Flash)</div>
-                  <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>1시간 기준 약 100원. 파일 용량 제한 없음. 빠르고 무난한 성능.</div>
-                </div>
-              </label>
-              <label style={{ flex: 1, display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: engine === "whisper" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: engine === "whisper" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
-                <input type="radio" name="engine" value="whisper" checked={engine === "whisper"} onChange={() => setEngine("whisper")} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>고품질 축어록 (OpenAI Whisper) <span className="badge badge-purple" style={{ fontSize: "10px" }}>PRO</span></div>
-                  <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>1시간 기준 약 500원. 최상급 품질. 단, 25MB 이하 파일만 업로드 가능 (m4a, mp3 권장).</div>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "var(--space-6)" }}>
-            <label className="form-label">
-              축어록 변환 지침 (자동 저장)
-            </label>
-            <textarea
-              className="form-textarea"
-              placeholder="예) 내담자가 울먹이는 부분은 괄호로 [울먹임] 표시해줘. 특정 억양을 최대한 살려줘."
-              value={instructions}
-              onChange={e => setInstructions(e.target.value)}
-              style={{ minHeight: "100px" }}
-            />
-          </div>
-
-          {/* Counselor Voice Registration (Optional) */}
-          <div style={{ marginBottom: "var(--space-6)" }}>
-            <label className="form-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>상담사 목소리 식별 등록 (선택)</span>
-              {engine === "whisper" && <span style={{ fontSize: "12px", color: "var(--color-error)", fontWeight: "normal" }}>Whisper 엔진은 미지원</span>}
-            </label>
-            <div style={{ 
-              background: engine === "whisper" ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)", 
-              padding: "var(--space-4)", 
-              borderRadius: "var(--radius-lg)", 
-              border: "1px solid var(--color-border)",
-              opacity: engine === "whisper" ? 0.5 : 1,
-              pointerEvents: engine === "whisper" ? "none" : "auto"
-            }}>
-              <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "var(--space-3)", lineHeight: 1.5 }}>
-                AI가 상담사 역할을 더 정확히 분류(Diarization)할 수 있도록 목소리 샘플을 남겨주세요. 아래 문장을 읽어주세요:<br/>
-                <strong style={{ color: "var(--color-text)", background: "rgba(0,0,0,0.2)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", marginTop: "8px" }}>
-                  &quot;안녕하세요, 저는 오늘 상담을 진행할 상담사입니다. 편안한 마음으로 이야기해 주시면 감사하겠습니다.&quot;
-                </strong>
-              </p>
-              
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}>
-                {!isRecording ? (
-                  <button type="button" className="btn btn-outline" onClick={startRecording} style={{ borderColor: 'var(--color-border)' }}>
-                    🎙️ 녹음 시작
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn-primary" onClick={stopRecording} style={{ background: "var(--color-error)", borderColor: "var(--color-error)" }}>
-                    ⏹ 녹음 정지 (녹음 중...)
-                  </button>
-                )}
-                
-                {counselorAudio && !isRecording && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", background: "rgba(0,0,0,0.3)", padding: "4px 12px", borderRadius: "20px" }}>
-                    <span style={{ fontSize: "16px" }}>✅</span>
-                    <audio 
-                      src={URL.createObjectURL(counselorAudio)} 
-                      controls 
-                      style={{ height: "30px", width: "200px" }}
-                    />
-                    <button type="button" style={{ background: "none", border: "none", color: "var(--color-error)", cursor: "pointer", marginLeft: "4px", fontSize: "12px", opacity: 0.8 }} onClick={() => setCounselorAudio(null)}>
-                      삭제
-                    </button>
+          {/* Engine Selection */}
+          <div>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "12px" }}>AI Engine Model</label>
+            <div style={{ display: "flex", gap: "16px" }}>
+              <label className={`engine-card ${engine === "gemini" ? "gemini-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "gemini" ? "rgba(168, 85, 247, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
+                <input type="radio" value="gemini" checked={engine === "gemini"} onChange={() => setEngine("gemini")} style={{ display: "none" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${engine === "gemini" ? "#a855f7" : "#475569"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {engine === "gemini" && <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#a855f7" }} />}
                   </div>
-                )}
+                  <span style={{ fontSize: "20px" }}>🧠</span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini" ? "#fff" : "#cbd5e1" }}>Gemini 2.5 Flash</div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>Unlimited size, High Accuracy, Context-aware</div>
+              </label>
+
+              <label className={`engine-card ${engine === "whisper" ? "whisper-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "whisper" ? "rgba(6, 182, 212, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
+                <input type="radio" value="whisper" checked={engine === "whisper"} onChange={() => setEngine("whisper")} style={{ display: "none" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${engine === "whisper" ? "#06b6d4" : "#475569"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {engine === "whisper" && <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#06b6d4" }} />}
+                  </div>
+                  <span style={{ fontSize: "20px" }}>🎙️</span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "whisper" ? "#fff" : "#cbd5e1" }}>Whisper v3 <span className="badge badge-purple" style={{ fontSize: "10px", marginLeft: "4px" }}>PRO</span></div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>Max 25MB, Robust, Large Vocabulary</div>
+              </label>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "24px" }}>
+            {/* Instructions */}
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Custom Instructions</label>
+              <textarea
+                className="form-textarea premium-input"
+                placeholder="e.g. Note any emotional pauses in brackets like [Crying]."
+                value={instructions}
+                onChange={e => setInstructions(e.target.value)}
+                style={{ minHeight: "140px", resize: "none" }}
+              />
+            </div>
+
+            {/* Voice Registration */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>
+                <span>Voice Registration (Diarization)</span>
+                {engine === "whisper" && <span style={{ fontSize: "11px", color: "#ef4444" }}>Not supported in Whisper</span>}
+              </label>
+              
+              <div style={{ 
+                flex: 1,
+                background: engine === "whisper" ? "rgba(0,0,0,0.1)" : "linear-gradient(145deg, rgba(30,27,75,0.4) 0%, rgba(15,23,42,0.4) 100%)", 
+                borderRadius: "12px", 
+                border: "1px solid rgba(255,255,255,0.05)",
+                padding: "20px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: engine === "whisper" ? 0.3 : 1,
+                pointerEvents: engine === "whisper" ? "none" : "auto",
+                position: "relative",
+                overflow: "hidden"
+              }}>
+                <div style={{ textAlign: "center", zIndex: 1 }}>
+                  {!counselorAudio ? (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={isRecording ? "mic-active" : ""}
+                        style={{ 
+                          width: "64px", height: "64px", borderRadius: "50%", 
+                          background: isRecording ? "linear-gradient(135deg, #a855f7, #ec4899)" : "rgba(255,255,255,0.05)",
+                          border: isRecording ? "none" : "1px solid rgba(255,255,255,0.1)",
+                          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", transition: "all 0.3s", margin: "0 auto 16px"
+                        }}
+                      >
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill={isRecording ? "#fff" : "none"} stroke="currentColor" strokeWidth={isRecording ? "0" : "1.5"} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                          <line x1="12" y1="19" x2="12" y2="22"></line>
+                        </svg>
+                      </button>
+                      <div style={{ fontSize: "14px", fontWeight: 500, color: isRecording ? "#f472b6" : "#cbd5e1" }}>
+                        {isRecording ? "Recording..." : "Add Voice Profile"}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>Read a 10s intro sentence</div>
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(16, 185, 129, 0.2)", color: "#10b981", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: 500, color: "#10b981" }}>Profile Registered</div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <audio src={URL.createObjectURL(counselorAudio)} controls style={{ height: "24px", width: "120px", display: "none" }} />
+                        <button type="button" onClick={() => setCounselorAudio(null)} style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "4px 12px", borderRadius: "4px", fontSize: "12px", cursor: "pointer" }}>Remove</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          <div style={{ marginBottom: "var(--space-6)" }}>
-            <label className="form-label">오디오 파일 업로드</label>
-            <div style={{ border: "2px dashed var(--color-border)", padding: "var(--space-6)", borderRadius: "var(--radius-lg)", textAlign: "center", position: "relative" }}>
+          <div style={{}}>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#cbd5e1", marginBottom: "8px" }}>Audio File Upload</label>
+            <div style={{ background: "rgba(0,0,0,0.2)", border: "1px dashed rgba(255,255,255,0.2)", padding: "24px", borderRadius: "12px", textAlign: "center", position: "relative", transition: "all 0.2s" }}>
               <input
-                type="file"
-                accept="audio/*"
-                ref={fileInputRef}
-                onChange={handleFileChange}
+                type="file" accept="audio/*" ref={fileInputRef} onChange={handleFileChange}
                 style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" }}
               />
               <div style={{ pointerEvents: "none" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto var(--space-3)" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 12px" }}>
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                  <polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
                 {file ? (
                   <div>
-                    <div style={{ fontWeight: 600 }}>{file.name}</div>
-                    <div style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                    <div style={{ fontWeight: 500, color: "#fff", fontSize: "14px" }}>{file.name}</div>
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
                       {(file.size / 1024 / 1024).toFixed(2)} MB
-                      {engine === "whisper" && file.size > 25 * 1024 * 1024 && (
-                        <span style={{ color: "var(--color-error)", display: "block", marginTop: "4px" }}>
-                          ⚠️ Whisper 제한 25MB를 초과했습니다. Gemini 엔진을 선택하거나 파일을 압축하세요.
-                        </span>
-                      )}
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontWeight: 500 }}>클릭하거나 파일을 여기로 드래그하세요</div>
-                    <div style={{ fontSize: "13px", color: "var(--color-text-muted)", marginTop: "var(--space-2)" }}>MP3, M4A, WAV 등 지원</div>
+                    <div style={{ fontWeight: 500, color: "#e2e8f0", fontSize: "14px" }}>Drag & Drop or Click to Browse</div>
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>MP3, M4A, WAV (Max 20MB directly recommended)</div>
                   </div>
                 )}
               </div>
@@ -302,113 +382,144 @@ export default function TranscriptPage() {
           </div>
 
           {status !== "idle" && status !== "done" && (
-            <div style={{ marginBottom: "var(--space-6)", padding: "var(--space-4)", backgroundColor: status === "error" ? "rgba(239, 68, 68, 0.1)" : "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-md)", border: status === "error" ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid var(--color-border)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: status !== "error" ? "var(--space-3)" : 0 }}>
+            <div style={{ padding: "16px", background: status === "error" ? "rgba(239, 68, 68, 0.1)" : "rgba(168, 85, 247, 0.1)", borderRadius: "8px", border: status === "error" ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(168, 85, 247, 0.3)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: status !== "error" ? "12px" : 0 }}>
                 {status !== "error" ? (
-                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: "2px solid var(--color-primary)", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
+                  <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #a855f7", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
                 ) : (
-                  <span style={{ color: "var(--color-error)", fontSize: "20px" }}>⚠️</span>
+                  <span style={{ fontSize: "18px" }}>⚠️</span>
                 )}
-                <span style={{ fontWeight: 500, color: status === "error" ? "var(--color-error)" : "inherit" }}>{progressMsg}</span>
+                <span style={{ fontWeight: 500, fontSize: "14px", color: status === "error" ? "#ef4444" : "#e2e8f0" }}>{progressMsg}</span>
               </div>
-              
               {status !== "error" && (
-                <div style={{ height: "4px", background: "rgba(255, 255, 255, 0.1)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ height: "100%", background: "var(--color-primary)", width: currentStep() === 1 ? "40%" : "80%", transition: "width 0.5s ease" }} />
+                <div style={{ height: "4px", background: "rgba(0,0,0,0.3)", borderRadius: "2px", overflow: "hidden" }}>
+                  <div style={{ height: "100%", background: "#a855f7", width: currentStep() === 1 ? "40%" : "80%", transition: "width 0.5s ease" }} />
                 </div>
               )}
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button 
-              className="btn btn-primary" 
-              onClick={handleTranscribe} 
-              disabled={!file || status === "uploading" || status === "transcribing" || (engine === "whisper" && file && file.size > 25 * 1024 * 1024)}
-              style={{ width: "100%" }}
-            >
-              축어록 변환 시작
-            </button>
-          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleTranscribe} 
+            disabled={!file || status === "uploading" || status === "transcribing" || (engine === "whisper" && file && file.size > 25 * 1024 * 1024)}
+            style={{ width: "100%", height: "48px", fontSize: "15px", fontWeight: 600, background: "linear-gradient(to right, #7e22ce, #db2777)", border: "none", marginTop: "auto" }}
+          >
+            {status === "uploading" || status === "transcribing" ? "Processing..." : "Generate Transcript"}
+          </button>
         </div>
-      </div>
 
-      {/* Right Column: Preview / History */}
-      <div style={{ width: "450px", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-        {viewingRecord ? (
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-4)" }}>
-              <div>
-                <h3 style={{ fontWeight: 700 }}>{viewingRecord.clientName} ({viewingRecord.sessionDate})</h3>
-                <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Engine: {viewingRecord.engine}</span>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: "4px 8px", fontSize: "12px" }}
-                  onClick={() => {
-                    const blob = new Blob([viewingRecord.content], { type: "text/plain" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `축어록_${viewingRecord.clientName}_${viewingRecord.sessionDate}.txt`;
-                    a.click();
-                  }}
-                >
-                  다운로드
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: "4px 8px", fontSize: "12px", color: "var(--color-error)", borderColor: "rgba(239, 68, 68, 0.3)" }}
-                  onClick={() => handleDelete(viewingRecord.id)}
-                >
-                  삭제
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ flex: 1, overflowY: "auto", background: "rgba(0, 0, 0, 0.2)", padding: "var(--space-4)", borderRadius: "var(--radius-md)", fontSize: "14px", lineHeight: 1.6, whiteSpace: "pre-wrap", border: "1px solid var(--color-border)" }}>
-              {viewingRecord.content}
-            </div>
-            
-            <button 
-              className="btn btn-secondary" 
-              style={{ marginTop: "var(--space-4)" }}
-              onClick={() => setViewingRecord(null)}
-            >
-              목록으로 돌아가기
-            </button>
+        {/* Right Column: History */}
+        <div style={{ flex: "1 1 35%", display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, margin: "0 0 16px 0", color: "#f8fafc" }}>Transcription History</h2>
           </div>
-        ) : (
-          <div className="card" style={{ flex: 1 }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>변환 기록 (최근순)</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          
+          {viewingRecord ? (
+            <div className="glass-card" style={{ flex: 1, padding: "24px", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "16px", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                <div>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#fff" }}>{viewingRecord.clientName}</h3>
+                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>{viewingRecord.sessionDate} • {viewingRecord.engine}</div>
+                </div>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={async () => {
+                      if (!viewingRecord) return;
+                      await saveTranscript(viewingRecord);
+                      await loadHistory();
+                      alert("수정사항이 저장되었습니다.");
+                    }}
+                    style={{ background: "rgba(168, 85, 247, 0.2)", border: "1px solid rgba(168, 85, 247, 0.4)", color: "#d8b4fe", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer", fontWeight: 600 }}
+                  >수정사항 저장</button>
+                  <button onClick={() => {
+                      const blob = new Blob([viewingRecord.content], { type: "text/plain;charset=utf-8" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `축어록_${viewingRecord.clientName}_${viewingRecord.sessionDate}.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(a.href);
+                    }}
+                    style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}
+                  >TXT 다운로드</button>
+                  <button onClick={() => {
+                      let csv = "\uFEFF"; // BOM for Excel UTF-8
+                      csv += "화자구분,번호,구분,내용\n";
+                      const lines = viewingRecord.content.split('\n');
+                      for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        const match = trimmed.match(/^([a-zA-Z가-힣]+)\s*(\d*)\s*[:：]\s*(.*)$/);
+                        if (match) {
+                          const roleStr = match[1].trim();
+                          const numStr = match[2].trim();
+                          const text = `"${match[3].replace(/"/g, '""')}"`;
+                          csv += `"${roleStr}","${numStr}",":",${text}\n`;
+                        } else {
+                          csv += `"","","",` + `"${trimmed.replace(/"/g, '""')}"` + "\n";
+                        }
+                      }
+                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `축어록_${viewingRecord.clientName}_${viewingRecord.sessionDate}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(a.href);
+                    }}
+                    style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34d399", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}
+                  >엑셀(CSV) 다운로드</button>
+                  <button onClick={() => handleDelete(viewingRecord.id)}
+                    style={{ background: "transparent", border: "1px solid rgba(239, 68, 68, 0.4)", color: "#ef4444", padding: "6px 10px", borderRadius: "6px", fontSize: "12px", cursor: "pointer", marginLeft: "4px" }}
+                  >삭제</button>
+                </div>
+              </div>
+              
+              <textarea 
+                value={viewingRecord.content}
+                onChange={(e) => setViewingRecord({ ...viewingRecord, content: e.target.value })}
+                style={{ flex: 1, width: "100%", resize: "none", overflowY: "auto", background: "rgba(0,0,0,0.3)", borderRadius: "8px", padding: "16px", fontSize: "13px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", border: "1px solid rgba(255,255,255,0.03)", outline: "none", fontFamily: "inherit" }}
+              />
+              <button 
+                onClick={() => setViewingRecord(null)}
+                style={{ marginTop: "16px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", padding: "10px", borderRadius: "8px", cursor: "pointer", fontSize: "13px" }}
+              >← Back to History</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {history.length === 0 ? (
-                <div style={{ color: "var(--color-text-muted)", fontSize: "14px", textAlign: "center", padding: "var(--space-6) 0" }}>
-                  저장된 축어록 내역이 없습니다.
+                <div className="glass-card" style={{ padding: "40px 24px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
+                  No transcriptions yet.
                 </div>
               ) : (
                 history.map(record => (
-                  <div 
-                    key={record.id} 
-                    style={{ padding: "var(--space-3)", background: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s" }}
-                    onClick={() => setViewingRecord(record)}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: "14px" }}>{record.clientName}</div>
-                      <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
-                        {record.sessionDate} • {record.engine}
+                  <div key={record.id} className="glass-card history-item" onClick={() => setViewingRecord(record)} style={{ padding: "16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                      <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(168, 85, 247, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#a855f7" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                      </div>
+                      <div>
+                        <div style={{ color: "#f8fafc", fontWeight: 500, fontSize: "14px", marginBottom: "4px" }}>{record.clientName}_{record.sessionDate}.txt</div>
+                        <div style={{ display: "flex", gap: "12px", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#10b981", background: "rgba(16, 185, 129, 0.1)", padding: "2px 8px", borderRadius: "10px" }}>
+                            <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#10b981" }} /> Completed
+                          </span>
+                          <span>{record.engine}</span>
+                        </div>
                       </div>
                     </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
+                    <button style={{ background: "linear-gradient(135deg, #06b6d4, #3b82f6)", border: "none", color: "#fff", padding: "6px 16px", borderRadius: "20px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                      View
+                    </button>
                   </div>
                 ))
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
       </div>
     </div>
   );

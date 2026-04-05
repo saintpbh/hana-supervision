@@ -7,9 +7,28 @@ export interface TranscriptRecord {
   content: string;
   createdAt: number;
   engine: "gemini" | "whisper";
+  isDeleted?: boolean;
+  deletedAt?: number;
 }
 
 const STORAGE_PREFIX = "hana_transcript_";
+
+export async function cleanupTrash(): Promise<void> {
+  const allKeys = await keys();
+  const transcriptKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith(STORAGE_PREFIX));
+  
+  const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  
+  for (const key of transcriptKeys) {
+    const record = await get<TranscriptRecord>(key as string);
+    if (record && record.isDeleted && record.deletedAt) {
+      if (now - record.deletedAt > thirtyDaysInMs) {
+        await del(key as string); // Perm delete
+      }
+    }
+  }
+}
 
 export async function saveTranscript(record: TranscriptRecord): Promise<void> {
   await set(`${STORAGE_PREFIX}${record.id}`, record);
@@ -19,24 +38,64 @@ export async function getTranscript(id: string): Promise<TranscriptRecord | unde
   return await get(`${STORAGE_PREFIX}${id}`);
 }
 
-export async function deleteTranscript(id: string): Promise<void> {
+export async function moveToTrash(id: string): Promise<void> {
+  const record = await getTranscript(id);
+  if (record) {
+    record.isDeleted = true;
+    record.deletedAt = Date.now();
+    await saveTranscript(record);
+  }
+}
+
+export async function restoreTranscript(id: string): Promise<void> {
+  const record = await getTranscript(id);
+  if (record) {
+    record.isDeleted = false;
+    record.deletedAt = undefined;
+    await saveTranscript(record);
+  }
+}
+
+export async function deleteTranscriptPerm(id: string): Promise<void> {
   await del(`${STORAGE_PREFIX}${id}`);
 }
 
-export async function getAllTranscripts(): Promise<TranscriptRecord[]> {
+// Deprecated alias for backwards compatibility
+export const deleteTranscript = moveToTrash;
+
+export async function getAllTranscripts(includeDeleted = false): Promise<TranscriptRecord[]> {
+  await cleanupTrash();
   const allKeys = await keys();
   const transcriptKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith(STORAGE_PREFIX));
   
   const records: TranscriptRecord[] = [];
   for (const key of transcriptKeys) {
-    const record = await get(key as string);
+    const record = await get<TranscriptRecord>(key as string);
     if (record) {
-      records.push(record as TranscriptRecord);
+      if (includeDeleted || !record.isDeleted) {
+        records.push(record);
+      }
     }
   }
   
   // Sort descending by creation
   return records.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getDeletedTranscripts(): Promise<TranscriptRecord[]> {
+  await cleanupTrash();
+  const allKeys = await keys();
+  const transcriptKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith(STORAGE_PREFIX));
+  
+  const records: TranscriptRecord[] = [];
+  for (const key of transcriptKeys) {
+    const record = await get<TranscriptRecord>(key as string);
+    if (record && record.isDeleted) {
+      records.push(record);
+    }
+  }
+  
+  return records.sort((a, b) => (b.deletedAt || b.createdAt) - (a.deletedAt || a.createdAt));
 }
 
 export function generateTranscriptId(): string {

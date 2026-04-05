@@ -96,16 +96,21 @@ function NewReportContent() {
     return `${n.getHours().toString().padStart(2, "0")}:${n.getMinutes().toString().padStart(2, "0")}:${n.getSeconds().toString().padStart(2, "0")}`;
   }
 
+  const [reportVersions, setReportVersions] = useState<{ reportContent: string; createdAt: string }[]>([]);
+
   /* ── autosave to report storage ── */
-  const autoSaveAll = useCallback((fd?: ReportFormData, rc?: string) => {
+  const autoSaveAll = useCallback((fd?: ReportFormData, rc?: string, saveAsVersion = false) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const currentFd = fd ?? formData;
       const currentRc = rc ?? reportContent;
-      const saved = saveReport(reportId, currentFd, currentRc);
+      const saved = saveReport(reportId, currentFd, currentRc, saveAsVersion);
       if (!reportId) {
         setReportId(saved.id);
         window.history.replaceState(null, "", `/report/new?id=${saved.id}`);
+      }
+      if (saved.versions) {
+        setReportVersions(saved.versions);
       }
       // Notify sidebar
       window.dispatchEvent(new Event("reports-updated"));
@@ -350,6 +355,7 @@ function NewReportContent() {
     } catch {}
 
     const isMultiMode = aiInstructions?.orchestrationMode === "multi";
+    const isGeminiMultiMode = aiInstructions?.orchestrationMode === "gemini-multi";
     
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -373,10 +379,30 @@ function NewReportContent() {
           });
         }
       }, 7000); 
+    } else if (isGeminiMultiMode) {
+      setLoadingState({
+        title: "싱글 오케스트레이션 1: 구조 분석 중...",
+        desc: "초고속 모델(Gemini 2.5 Flash)이 데이터를 파싱하고 요약합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+      });
+      let progressStep = 1;
+      intervalId = setInterval(() => {
+        progressStep++;
+        if (progressStep === 2) {
+          setLoadingState({
+            title: "싱글 오케스트레이션 2: 임상 진단 중...",
+            desc: "선택하신 모델이 DSM-5 기반 진단 소견과 사례개념화를 도출합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+          });
+        } else if (progressStep === 4) {
+          setLoadingState({
+            title: "싱글 오케스트레이션 3: 최종 서술 중...",
+            desc: "최종 모델이 진단 결과를 아울러 세련된 슈퍼비전 보고서를 작성합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+          });
+        }
+      }, 7000); 
     } else {
       setLoadingState({
         title: "단일 모델 보고서 생성 중...",
-        desc: "AI가 입력하신 데이터를 분석하여\n슈퍼비전 보고서를 작성하고 있습니다."
+        desc: "선택하신 AI 통일 모델 하나로 1-pass 방식으로\n즉시 슈퍼비전 보고서를 작성하고 있습니다."
       });
     }
 
@@ -393,8 +419,10 @@ function NewReportContent() {
       if (data.mode) setGenerationMode(data.mode);
       
       localStorage.setItem("hana_report_draft", data.report);
+      autoSaveAll(formData, data.report, true);
+      
       setLastSavedAt(nowTime());
-      setSaveMessage("🎉 보고서가 생성되고 안전하게 저장되었습니다!");
+      setSaveMessage("🎉 보고서가 생성되고 이전 버전이 보존되었습니다!");
       if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
       msgTimerRef.current = setTimeout(() => setSaveMessage(null), 5000);
     } catch (err: unknown) {
@@ -454,7 +482,15 @@ function NewReportContent() {
   /* ── report content change ── */
   function handleReportChange(newContent: string) {
     setReportContent(newContent);
-    autoSaveAll(undefined, newContent);
+    autoSaveAll(undefined, newContent, false);
+  }
+
+  function handleRestoreVersion(content: string) {
+    if (confirm("해당 버전의 보고서 내용으로 덮어쓰시겠습니까?")) {
+      setReportContent(content);
+      autoSaveAll(undefined, content, false);
+      alert("이전 버전으로 복원되었습니다.");
+    }
   }
 
   /* ── rendering ── */
@@ -474,33 +510,35 @@ function NewReportContent() {
         </div>
       )}
 
-      {/* Left: Stepper */}
-      <aside className={styles.stepperPanel}>
-        <h2 className={styles.stepperTitle}>보고서 작성</h2>
-        <p className={styles.stepperSubtitle}>정규양식에 따라 입력하세요</p>
-        <div className="stepper" style={{ marginTop: "var(--space-8)" }}>
-          {STEPS.map((s, i) => {
-            let state = "";
-            if (i < step) state = "completed";
-            else if (i === step) state = "active";
-            return (
-              <div key={i} className={`stepper-item ${state}`} onClick={() => setStep(i)}>
-                <div className="stepper-circle">
-                  {i < step ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  ) : `0${i + 1}`}
+      {/* Left: Stepper & Version History */}
+      <aside className={styles.stepperPanel} style={{ display: 'flex', flexDirection: 'column' }}>
+        <div>
+          <h2 className={styles.stepperTitle}>보고서 작성</h2>
+          <p className={styles.stepperSubtitle}>정규양식에 따라 입력하세요</p>
+          <div className="stepper" style={{ marginTop: "var(--space-8)" }}>
+            {STEPS.map((s, i) => {
+              let state = "";
+              if (i < step) state = "completed";
+              else if (i === step) state = "active";
+              return (
+                <div key={i} className={`stepper-item ${state}`} onClick={() => setStep(i)}>
+                  <div className="stepper-circle">
+                    {i < step ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    ) : `0${i + 1}`}
+                  </div>
+                  <div className="stepper-text">
+                    <div className="stepper-title">{s.title}</div>
+                    <div className="stepper-desc">{s.desc}</div>
+                  </div>
                 </div>
-                <div className="stepper-text">
-                  <div className="stepper-title">{s.title}</div>
-                  <div className="stepper-desc">{s.desc}</div>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {/* Save indicator */}
-        <div className={styles.saveIndicator}>
+        <div className={styles.saveIndicator} style={{ marginBottom: reportVersions.length > 0 ? "16px" : "auto" }}>
           {saveMessage ? (
             <div className={styles.saveToast}>{saveMessage}</div>
           ) : lastSavedAt ? (
@@ -515,6 +553,26 @@ function NewReportContent() {
             </div>
           )}
         </div>
+
+        {/* Version History List */}
+        {reportVersions.length > 0 && (
+          <div style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "16px", maxHeight: "30vh", overflowY: "auto" }}>
+            <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#f8fafc", marginBottom: "12px" }}>🤖 이전 생성 버전 (기록)</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {reportVersions.map((v, i) => (
+                <div key={i} className="glass-card" style={{ padding: "10px", fontSize: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ color: "#cbd5e1" }}>생성: {new Date(v.createdAt).toLocaleString()}</div>
+                    <div style={{ color: "#64748b", marginTop: "2px" }}>글 길이: {v.reportContent.length}자</div>
+                  </div>
+                  <button onClick={() => handleRestoreVersion(v.reportContent)} style={{ background: "rgba(168, 85, 247, 0.15)", border: "1px solid rgba(168, 85, 247, 0.3)", color: "#c084fc", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                    불러오기
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Right: Form content */}

@@ -38,22 +38,70 @@ export async function transcribeAudio({ apiKey, file, counselorAudio, instructio
   } 
   
   if (engine === "gemini") {
-    if (file.size > 20 * 1024 * 1024) {
-      throw new Error("보안 정책 및 브라우저 전송 한계로 인해, 현재 브라우저 직접 변환은 20MB 미만의 파일만 지원합니다. 큰 비디오 파일은 음성(mp3, m4a 등)으로 변환 후 업로드해주세요.");
-    }
+    let mainAudioPart: Part;
 
-    onProgress?.("오디오 압축 및 프롬프트 준비 중...");
-    
-    // Convert main session audio
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    if (file.size > 19 * 1024 * 1024) {
+      // 대용량 파일: Gemini File API (Multipart Upload) 직접 사용
+      onProgress?.(`Gemini 서버로 대용량 파일 전송 시작... (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      
+      const boundary = "------HanaFormBoundary" + Math.random().toString(36).substring(2);
+      const metadata = JSON.stringify({ file: { display_name: file.name } });
+      
+      const blob = new Blob([
+        `--${boundary}\r\n`,
+        `Content-Type: application/json\r\n\r\n`,
+        `${metadata}\r\n`,
+        `--${boundary}\r\n`,
+        `Content-Type: ${file.type}\r\n\r\n`,
+        file,
+        `\r\n--${boundary}--\r\n`
+      ]);
+
+      const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Protocol": "multipart",
+          "Content-Type": `multipart/related; boundary=${boundary}`
+        },
+        body: blob
+      });
+
+      if (!uploadRes.ok) {
+        const errTxt = await uploadRes.text();
+        throw new Error("대용량 업로드 실패: " + errTxt);
+      }
+
+      const uploadData = await uploadRes.json();
+      const fileUri = uploadData.file.uri;
+      const fileName = uploadData.file.name; // e.g. "files/xyz"
+
+      onProgress?.("업로드 완료. 오디오 데이터 처리 대기 중...");
+      let state = uploadData.file.state;
+      while (state === "PROCESSING") {
+        await new Promise(r => setTimeout(r, 3000));
+        const statRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
+        if (!statRes.ok) break; 
+        const statData = await statRes.json();
+        state = statData.state;
+        if (state === "FAILED") throw new Error("서버에서 오디오/비디오 처리에 실패했습니다.");
+      }
+
+      mainAudioPart = { fileData: { fileUri, mimeType: file.type } };
+
+    } else {
+      // 소용량 파일: Base64 인라인 전송
+      onProgress?.("오디오 압축 및 프롬프트 준비 중...");
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      mainAudioPart = { inlineData: { data: base64Data, mimeType: file.type } };
+    }
 
     // Convert counselor sample audio if exists
     let counselorBase64 = null;
@@ -97,7 +145,7 @@ ${instructions}`;
       parts.push({ inlineData: { data: counselorBase64, mimeType: counselorMimeType } });
     }
 
-    parts.push({ inlineData: { data: base64Data, mimeType: file.type } });
+    parts.push(mainAudioPart);
     parts.unshift({ text: systemPrompt });
 
     const result = await model.generateContent(parts);
