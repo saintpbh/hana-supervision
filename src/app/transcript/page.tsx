@@ -9,7 +9,7 @@ export default function TranscriptPage() {
   // State
   const [clientName, setClientName] = useState("");
   const [sessionDate, setSessionDate] = useState("");
-  const [engine, setEngine] = useState<"gemini" | "whisper">("gemini");
+  const [engine, setEngine] = useState<"gemini" | "gemini-pro" | "whisper">("gemini");
   const [instructions, setInstructions] = useState("");
   const [file, setFile] = useState<File | null>(null);
   
@@ -105,8 +105,8 @@ export default function TranscriptPage() {
     if (!keysStr) return alert("설정 메뉴에서 API 키를 먼저 등록해주세요.");
     const parsed = JSON.parse(keysStr);
     
-    const apiKey = engine === "gemini" ? parsed.apiKey : parsed.openaiApiKey;
-    if (!apiKey) return alert(`${engine === "gemini" ? "Gemini" : "OpenAI"} API 키가 설정에 등록되어 있지 않습니다.`);
+    const apiKey = engine.startsWith("gemini") ? parsed.apiKey : parsed.openaiApiKey;
+    if (!apiKey) return alert(`${engine.startsWith("gemini") ? "Gemini" : "OpenAI"} API 키가 설정에 등록되어 있지 않습니다.`);
 
     setStatus("uploading");
     setProgressMsg("작업 준비 중...");
@@ -115,7 +115,7 @@ export default function TranscriptPage() {
       const text = await transcribeAudio({
         apiKey,
         file,
-        counselorAudio: engine === "gemini" ? counselorAudio : null,
+        counselorAudio: engine.startsWith("gemini") ? counselorAudio : null,
         instructions,
         engine,
         onProgress: (msg) => {
@@ -198,6 +198,10 @@ export default function TranscriptPage() {
           border-color: #a855f7;
           box-shadow: 0 0 20px rgba(168, 85, 247, 0.2), inset 0 0 20px rgba(168, 85, 247, 0.1);
         }
+        .engine-card.gemini-pro-active {
+          border-color: #ec4899;
+          box-shadow: 0 0 20px rgba(236, 72, 153, 0.2), inset 0 0 20px rgba(236, 72, 153, 0.1);
+        }
         .engine-card.whisper-active {
           border-color: #06b6d4;
           box-shadow: 0 0 20px rgba(6, 182, 212, 0.2), inset 0 0 20px rgba(6, 182, 212, 0.1);
@@ -258,6 +262,18 @@ export default function TranscriptPage() {
                 </div>
                 <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini" ? "#fff" : "#cbd5e1" }}>Gemini 2.5 Flash</div>
                 <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>무제한 용량 처리, 압도적 문맥 파악 구조</div>
+              </label>
+
+              <label className={`engine-card ${engine === "gemini-pro" ? "gemini-pro-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "gemini-pro" ? "rgba(236, 72, 153, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>
+                <input type="radio" value="gemini-pro" checked={engine === "gemini-pro"} onChange={() => setEngine("gemini-pro")} style={{ display: "none" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${engine === "gemini-pro" ? "#ec4899" : "#475569"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {engine === "gemini-pro" && <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ec4899" }} />}
+                  </div>
+                  <span style={{ fontSize: "20px" }}>🌟</span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: "16px", color: engine === "gemini-pro" ? "#fff" : "#cbd5e1" }}>Gemini 1.5 Pro <span className="badge badge-purple" style={{ fontSize: "10px", marginLeft: "4px", background: "#ec4899" }}>HIGH</span></div>
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>최고 성능 화자 분리, 강력한 문맥 추적 (다소 느림)</div>
               </label>
 
               <label className={`engine-card ${engine === "whisper" ? "whisper-active" : ""}`} style={{ flex: 1, padding: "20px", borderRadius: "12px", border: "2px solid rgba(255,255,255,0.08)", background: engine === "whisper" ? "rgba(6, 182, 212, 0.05)" : "rgba(0,0,0,0.2)", cursor: "pointer" }}>

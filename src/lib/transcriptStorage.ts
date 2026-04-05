@@ -6,7 +6,7 @@ export interface TranscriptRecord {
   sessionDate: string;
   content: string;
   createdAt: number;
-  engine: "gemini" | "whisper";
+  engine: "gemini" | "gemini-pro" | "whisper" | string;
   isDeleted?: boolean;
   deletedAt?: number;
 }

@@ -5,7 +5,7 @@ interface TranscribeOptions {
   file: File;
   counselorAudio?: Blob | null;
   instructions: string;
-  engine: "gemini" | "whisper";
+  engine: "gemini" | "gemini-pro" | "whisper" | string;
   onProgress?: (msg: string) => void;
 }
 
@@ -37,7 +37,7 @@ export async function transcribeAudio({ apiKey, file, counselorAudio, instructio
     return data.text;
   } 
   
-  if (engine === "gemini") {
+  if (engine.startsWith("gemini")) {
     let mainAudioPart: Part;
 
     if (file.size > 19 * 1024 * 1024) {
@@ -122,7 +122,8 @@ export async function transcribeAudio({ apiKey, file, counselorAudio, instructio
     onProgress?.("Gemini 서버로 분석 요청 및 변환 중 (수 분이 소요될 수 있습니다)...");
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
+    const modelName = engine === "gemini-pro" ? "gemini-1.5-pro" : "gemini-2.5-flash";
+    const model = genAI.getGenerativeModel({ model: modelName }); 
 
     let systemPrompt = `당신은 전문 심리상담 축어록 속기사입니다. 첨부된 상담 오디오를 처음부터 끝까지 빠짐없이 들어보고 매우 정확한 텍스트 축어록을 작성하세요.
     - 화자는 반드시 상담사는 "상1:", 내담자는 "내1:" 로 표기하세요.
