@@ -2,6 +2,7 @@ import { ReportFormData, INITIAL_FORM_DATA } from "@/types/report";
 
 export interface SavedReportVersion {
   reportContent: string;
+  referenceContent?: string;
   createdAt: string;
 }
 
@@ -10,6 +11,7 @@ export interface SavedReport {
   title: string;
   formData: ReportFormData;
   reportContent: string;
+  referenceContent?: string;
   createdAt: string;
   updatedAt: string;
   versions?: SavedReportVersion[];
@@ -105,6 +107,7 @@ export function saveReport(
   id: string | null,
   formData: ReportFormData,
   reportContent: string,
+  referenceContent?: string,
   saveAsVersion = false
 ): SavedReport {
   const reports = getAllReports(true);
@@ -119,7 +122,7 @@ export function saveReport(
       let newVersions = existing.versions || [];
       // Only push to versions explicitly when requested (e.g. at Generation)
       if (saveAsVersion && existing.reportContent) {
-        newVersions = [{ reportContent: existing.reportContent, createdAt: existing.updatedAt }, ...newVersions];
+        newVersions = [{ reportContent: existing.reportContent, referenceContent: existing.referenceContent, createdAt: existing.updatedAt }, ...newVersions];
       }
 
       reports[idx] = {
@@ -127,6 +130,7 @@ export function saveReport(
         title,
         formData,
         reportContent,
+        referenceContent: referenceContent ?? existing.referenceContent,
         updatedAt: now,
         versions: newVersions,
         isDeleted: false,
@@ -143,6 +147,7 @@ export function saveReport(
     title,
     formData,
     reportContent,
+    referenceContent,
     createdAt: now,
     updatedAt: now,
     versions: []

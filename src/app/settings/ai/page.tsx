@@ -51,28 +51,6 @@ export default function AIInstructionsPage() {
                 style={{ flex: 1, padding: "var(--space-2) var(--space-3)", fontSize: "14px", fontFamily: "monospace" }}
               />
             </div>
-            <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
-              <div style={{ width: "120px", fontWeight: 500, fontSize: "14px" }}>ChatGPT</div>
-              <input
-                type="password"
-                className="input-text"
-                placeholder="sk-proj-..."
-                value={localData.openaiApiKey || ""}
-                onChange={(e) => setLocalData({ ...localData, openaiApiKey: e.target.value })}
-                style={{ flex: 1, padding: "var(--space-2) var(--space-3)", fontSize: "14px", fontFamily: "monospace" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
-              <div style={{ width: "120px", fontWeight: 500, fontSize: "14px" }}>Claude</div>
-              <input
-                type="password"
-                className="input-text"
-                placeholder="sk-ant-..."
-                value={localData.anthropicApiKey || ""}
-                onChange={(e) => setLocalData({ ...localData, anthropicApiKey: e.target.value })}
-                style={{ flex: 1, padding: "var(--space-2) var(--space-3)", fontSize: "14px", fontFamily: "monospace" }}
-              />
-            </div>
           </div>
           
           <h2 style={{ fontSize: "16px", fontWeight: 600, marginTop: "var(--space-6)", marginBottom: "var(--space-4)" }}>AI 런타임 모드 선택</h2>
@@ -81,22 +59,15 @@ export default function AIInstructionsPage() {
             <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "single" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "single" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
               <input type="radio" name="orchestrationMode" value="single" checked={localData.orchestrationMode === "single"} onChange={() => setLocalData({ ...localData, orchestrationMode: "single" })} />
               <div>
-                <div style={{ fontWeight: 600 }}>단일 모델 모드</div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>선택한 모델 1개가 분석부터 작성까지 모두 처리합니다.</div>
+                <div style={{ fontWeight: 600 }}>단일 모델 처리</div>
+                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>선택한 Gemini 모델 하나가 분석부터 작성, 검증까지 모두 처리합니다.</div>
               </div>
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "gemini-multi" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "gemini-multi" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
               <input type="radio" name="orchestrationMode" value="gemini-multi" checked={localData.orchestrationMode === "gemini-multi"} onChange={() => setLocalData({ ...localData, orchestrationMode: "gemini-multi" })} />
               <div>
-                <div style={{ fontWeight: 600 }}>싱글 AI 오케스트레이션 <span className="badge badge-blue" style={{ fontSize: "10px", backgroundColor: "rgba(59, 130, 246, 0.2)", color: "#93c5fd", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px" }}>NEW</span></div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Gemini 엔진 하나로 3명의 역할(분석/진단/작성)을 분담시켜 고품질 보고서를 작성합니다.</div>
-              </div>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", cursor: "pointer", background: localData.orchestrationMode === "multi" ? "rgba(255, 255, 255, 0.1)" : "transparent", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: localData.orchestrationMode === "multi" ? "1px solid var(--color-primary)" : "1px solid var(--color-border)" }}>
-              <input type="radio" name="orchestrationMode" value="multi" checked={localData.orchestrationMode === "multi"} onChange={() => setLocalData({ ...localData, orchestrationMode: "multi" })} />
-              <div>
-                <div style={{ fontWeight: 600 }}>3사 통합 멀티 에이전트 <span className="badge badge-purple" style={{ fontSize: "10px" }}>PRO</span></div>
-                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>Gemini, ChatGPT, Claude 각각의 장점을 결합하여 릴레이로 분석/진단/작성합니다. (3사 API 키 필요)</div>
+                <div style={{ fontWeight: 600 }}>Gemini 서브 에이전트 파이프라인 <span className="badge badge-blue" style={{ fontSize: "10px", backgroundColor: "rgba(59, 130, 246, 0.2)", color: "#93c5fd", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px" }}>권장</span></div>
+                <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>최상위 모델이 문서를 작성하고, 초고속 모델(Flash)이 가혹한 QA 검증을 전담하는 효율적 구조입니다.</div>
               </div>
             </label>
           </div>
@@ -113,20 +84,11 @@ export default function AIInstructionsPage() {
                 style={{ width: "100%", padding: "var(--space-2) var(--space-3)", fontSize: "14px", height: "100%", cursor: "pointer", backgroundColor: "rgba(255, 255, 255, 0.05)" }}
               >
                 <optgroup label="Google Gemini">
-                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro (최상위/실험)</option>
+                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro (최상위/실험적)</option>
                   <option value="gemini-3-flash-preview">gemini-3-flash (최신/강력함)</option>
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (권장)</option>
-                  <option value="gemini-2.0-flash">gemini-2.0-flash (안정/빠름)</option>
-                  <option value="gemini-1.5-pro">gemini-1.5-pro (안정/고성능)</option>
-                </optgroup>
-                <optgroup label="OpenAI ChatGPT">
-                  <option value="gpt-4o">gpt-4o (강력함)</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini (빠름)</option>
-                </optgroup>
-                <optgroup label="Anthropic Claude">
-                  <option value="claude-3-7-sonnet-20250219">claude-3.7-sonnet (최신/뛰어남)</option>
-                  <option value="claude-3-5-sonnet-20241022">claude-3.5-sonnet (권장)</option>
-                  <option value="claude-3-5-haiku-20241022">claude-3.5-haiku (빠름)</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro (최상위 성능)</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (권장/가성비)</option>
+                  <option value="gemini-2.0-flash">gemini-2.0-flash (매우 빠름)</option>
                 </optgroup>
               </select>
             </div>
@@ -198,19 +160,6 @@ export default function AIInstructionsPage() {
             </>
           )}
 
-          {localData.orchestrationMode === "multi" && (
-            <div style={{ backgroundColor: "rgba(0, 0, 0, 0.2)", borderRadius: "var(--radius-md)", padding: "var(--space-4)", marginBottom: "var(--space-4)" }}>
-              <h3 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "var(--space-3)", color: "var(--color-secondary)" }}>멀티 에이전트 협력 파이프라인 안내</h3>
-              <ul style={{ fontSize: "13px", color: "var(--color-text)", paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                <li><strong>1단계 (Data Parser):</strong> <span style={{ color: "var(--color-primary)" }}>Gemini-2.0-flash</span>가 원본 문서와 심리검사를 빠르게 분석합니다.</li>
-                <li><strong>2단계 (Diagnostician):</strong> <span style={{ color: "#10a37f" }}>GPT-4o</span>가 1단계 결과를 바탕으로 철저한 임상 진단을 수행합니다.</li>
-                <li><strong>3단계 (Synthesizer):</strong> <span style={{ color: "#d97757" }}>Claude-3.5-Sonnet</span>이 진단 결과를 토대로 최종 공감형 보고서를 서술합니다.</li>
-              </ul>
-              <div style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "var(--space-3)" }}>
-                *주의: 3사의 API Key가 모두 입력되어 있어야 정상 작동합니다.
-              </div>
-            </div>
-          )}
         </div>
 
         {/* 0. Role and Persona */}

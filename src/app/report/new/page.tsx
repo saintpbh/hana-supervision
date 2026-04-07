@@ -13,7 +13,7 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
 
 const STEPS = [
-  { title: "행정 정보", desc: "상담자, 기관, 슈퍼바이저" },
+  { title: "상담 정보", desc: "상담자, 기관, 슈퍼바이저" },
   { title: "내담자 정보", desc: "인적 사항" },
   { title: "상담 내용 요약", desc: "회기 요약, 축어록" },
   { title: "심리검사 데이터", desc: "SCT, MMPI-2, TCI 결과" },
@@ -40,6 +40,7 @@ function NewReportContent() {
   const [formData, setFormData] = useState<ReportFormData>(INITIAL_FORM_DATA);
   const [loadingState, setLoadingState] = useState<{ title: string; desc: string } | null>(null);
   const [reportContent, setReportContent] = useState("");
+  const [referenceContent, setReferenceContent] = useState("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [tokenUsage, setTokenUsage] = useState<any>(null);
   const [generationMode, setGenerationMode] = useState<string>("single");
@@ -83,28 +84,28 @@ function NewReportContent() {
     }
   };
 
-  const SAVE_MSGS = [
-    "✅ 안전하게 저장되었습니다",
-    "💾 입력 내용이 저장되었습니다",
-    "🔒 데이터가 안전하게 보관됩니다",
-    "✨ 저장 완료! 안심하세요",
-    "📋 작성 내용이 보존되었습니다",
-  ];
-
   function nowTime() {
     const n = new Date();
     return `${n.getHours().toString().padStart(2, "0")}:${n.getMinutes().toString().padStart(2, "0")}:${n.getSeconds().toString().padStart(2, "0")}`;
   }
 
-  const [reportVersions, setReportVersions] = useState<{ reportContent: string; createdAt: string }[]>([]);
+  const [reportVersions, setReportVersions] = useState<{ reportContent: string; referenceContent?: string; createdAt: string }[]>([]);
 
   /* ── autosave to report storage ── */
-  const autoSaveAll = useCallback((fd?: ReportFormData, rc?: string, saveAsVersion = false) => {
+  const autoSaveAll = useCallback((fd?: ReportFormData, rc?: string, refC?: string, saveAsVersion = false) => {
+    const SAVE_MSGS = [
+      "✅ 안전하게 저장되었습니다",
+      "💾 입력 내용이 저장되었습니다",
+      "🔒 데이터가 안전하게 보관됩니다",
+      "✨ 저장 완료! 안심하세요",
+      "📋 작성 내용이 보존되었습니다",
+    ];
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const currentFd = fd ?? formData;
       const currentRc = rc ?? reportContent;
-      const saved = saveReport(reportId, currentFd, currentRc, saveAsVersion);
+      const currentRefC = refC ?? referenceContent;
+      const saved = saveReport(reportId, currentFd, currentRc, currentRefC, saveAsVersion);
       if (!reportId) {
         setReportId(saved.id);
         window.history.replaceState(null, "", `/report/new?id=${saved.id}`);
@@ -118,31 +119,44 @@ function NewReportContent() {
       const msg = SAVE_MSGS[Math.floor(Math.random() * SAVE_MSGS.length)];
       setSaveMessage(msg);
       if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
-      msgTimerRef.current = setTimeout(() => setSaveMessage(null), 3000);
-    }, 600);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData, reportContent, reportId]);
+      msgTimerRef.current = setTimeout(() => setSaveMessage(null), 5000);
+    }, 1000);
+  }, [formData, reportContent, referenceContent, reportId]);
 
   /* ── load report on mount or when ID changes ── */
   useEffect(() => {
-    const id = searchParams.get("id");
-    if (id) {
-      const existing = getReport(id);
+    const draftFd = localStorage.getItem("hana_report_draft_fd");
+    if (!reportId && draftFd) {
+      try { setFormData(JSON.parse(draftFd)); } catch {}
+    }
+    const draftRc = localStorage.getItem("hana_report_draft");
+    if (!reportId && draftRc) {
+      setReportContent(draftRc);
+    }
+    const draftRef = localStorage.getItem("hana_reference_draft");
+    if (!reportId && draftRef) {
+      setReferenceContent(draftRef);
+    }
+
+    if (reportId) {
+      const existing = getReport(reportId);
       if (existing) {
-        setReportId(id);
         setFormData(existing.formData);
         setReportContent(existing.reportContent);
-        setStep(0);
+        if (existing.referenceContent) setReferenceContent(existing.referenceContent);
+        if (existing.versions) setReportVersions(existing.versions);
         return;
       }
     }
     // No ID or not found → create new
-    const fresh = createNewReport();
-    setReportId(fresh.id);
-    setFormData(fresh.formData);
-    setReportContent("");
-    router.replace(`/report/new?id=${fresh.id}`);
-    window.dispatchEvent(new Event("reports-updated"));
+    if (!reportId) {
+      const fresh = createNewReport();
+      setReportId(fresh.id);
+      setFormData(fresh.formData);
+      setReportContent("");
+      router.replace(`/report/new?id=${fresh.id}`);
+      window.dispatchEvent(new Event("reports-updated"));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
@@ -354,55 +368,39 @@ function NewReportContent() {
       if (stored) aiInstructions = JSON.parse(stored);
     } catch {}
 
-    const isMultiMode = aiInstructions?.orchestrationMode === "multi";
     const isGeminiMultiMode = aiInstructions?.orchestrationMode === "gemini-multi";
     
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    if (isMultiMode) {
+    if (isGeminiMultiMode) {
       setLoadingState({
-        title: "에이전트 1: 구조 분석 중...",
-        desc: "Gemini AI가 원본 문서와 심리검사를 분석하고 있습니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+        title: "1단계: 학술적 초안 작성 중...",
+        desc: "초고속 모델이 방대한 심리 데이터의 학술적 근거 초안을 도출하고 있습니다."
       });
       let progressStep = 1;
       intervalId = setInterval(() => {
         progressStep++;
         if (progressStep === 2) {
           setLoadingState({
-            title: "에이전트 2: 임상 진단 중...",
-            desc: "GPT-4o가 DSM-5 기반 임상 진단 소견을 도출하고 있습니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+            title: "2단계: QA 에이전트 팩트체크 진행 중...",
+            desc: "생성된 문서에 할루시네이션(거짓 정보)가 있는지 다른 AI 모델이 자체 채점과 검증을 진행합니다."
           });
-        } else if (progressStep === 4) {
+        } else if (progressStep === 3) {
           setLoadingState({
-            title: "에이전트 3: 최종 서술 중...",
-            desc: "Claude가 진단을 통합하여 특수 지침이 반영된 슈퍼비전 보고서를 완성 중입니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
+            title: "2-1단계: 재작성 또는 최종 병합 중...",
+            desc: "할루시네이션 발견 시 재작성 루프를 돌며, 무사 통과 시 검증 리포트를 합칩니다."
+          });
+        } else if (progressStep === 5) {
+          setLoadingState({
+            title: "3단계: 종합보고서 작성 중...",
+            desc: "검증을 통과한 레퍼런스 문헌을 참조하여, 최종 종합보고서를 유려하게 통합 작성하고 있습니다."
           });
         }
-      }, 7000); 
-    } else if (isGeminiMultiMode) {
-      setLoadingState({
-        title: "싱글 오케스트레이션 1: 구조 분석 중...",
-        desc: "초고속 모델(Gemini 2.5 Flash)이 데이터를 파싱하고 요약합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
-      });
-      let progressStep = 1;
-      intervalId = setInterval(() => {
-        progressStep++;
-        if (progressStep === 2) {
-          setLoadingState({
-            title: "싱글 오케스트레이션 2: 임상 진단 중...",
-            desc: "선택하신 모델이 DSM-5 기반 진단 소견과 사례개념화를 도출합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
-          });
-        } else if (progressStep === 4) {
-          setLoadingState({
-            title: "싱글 오케스트레이션 3: 최종 서술 중...",
-            desc: "최종 모델이 진단 결과를 아울러 세련된 슈퍼비전 보고서를 작성합니다.\n전체 과정은 최대 1분 내외가 소요될 수 있습니다."
-          });
-        }
-      }, 7000); 
+      }, 15000); 
     } else {
       setLoadingState({
-        title: "단일 모델 보고서 생성 중...",
-        desc: "선택하신 AI 통일 모델 하나로 1-pass 방식으로\n즉시 슈퍼비전 보고서를 작성하고 있습니다."
+        title: "QA 검증 포함 듀얼 보고서 생성 중...",
+        desc: "[1단계]초안 도출 ➝ [2단계]할루시네이션 자가 검증(QA) ➝ [3단계]최종 보고서 작성\n이 파이프라인은 최소 1~2분 이상 소요될 수 있습니다."
       });
     }
 
@@ -414,15 +412,17 @@ function NewReportContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "오류가 발생했습니다.");
+      setReferenceContent(data.reference);
       setReportContent(data.report);
       if (data.usage) setTokenUsage(data.usage);
       if (data.mode) setGenerationMode(data.mode);
       
+      localStorage.setItem("hana_reference_draft", data.reference);
       localStorage.setItem("hana_report_draft", data.report);
-      autoSaveAll(formData, data.report, true);
+      autoSaveAll(formData, data.report, data.reference, true);
       
       setLastSavedAt(nowTime());
-      setSaveMessage("🎉 보고서가 생성되고 이전 버전이 보존되었습니다!");
+      setSaveMessage("🎉 두 개의 보고서가 생성되고 이전 버전이 보존되었습니다!");
       if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
       msgTimerRef.current = setTimeout(() => setSaveMessage(null), 5000);
     } catch (err: unknown) {
@@ -435,13 +435,13 @@ function NewReportContent() {
   }
 
   /* ── download ── */
-  async function handleDownload(format: "txt" | "docx" | "md") {
+  async function handleDownload(format: "txt" | "docx" | "md", content: string, label: string) {
     const clientCode = formData.clientProfile.clientCode || "report";
     const date = new Date().toISOString().slice(0, 10);
-    const title = `슈퍼비전보고서_${clientCode}_${date}`;
+    const title = `슈퍼비전보고서_${label}_${clientCode}_${date}`;
 
     if (format === "docx") {
-      const paragraphs = reportContent.split('\n').map(line => {
+      const paragraphs = content.split('\n').map(line => {
         let isBold = false;
         let pText = line;
         let headingLevel = 0;
@@ -474,7 +474,7 @@ function NewReportContent() {
       saveAs(blob, `${title}.docx`);
     } else {
       const mime = format === "txt" ? "text/plain;charset=utf-8" : "text/markdown;charset=utf-8";
-      const blob = new Blob([reportContent], { type: mime });
+      const blob = new Blob([content], { type: mime });
       saveAs(blob, `${title}.${format}`);
     }
   }
@@ -482,13 +482,19 @@ function NewReportContent() {
   /* ── report content change ── */
   function handleReportChange(newContent: string) {
     setReportContent(newContent);
-    autoSaveAll(undefined, newContent, false);
+    autoSaveAll(undefined, newContent, undefined, false);
   }
 
-  function handleRestoreVersion(content: string) {
+  function handleReferenceChange(newContent: string) {
+    setReferenceContent(newContent);
+    autoSaveAll(undefined, undefined, newContent, false);
+  }
+
+  function handleRestoreVersion(content: string, refContent?: string) {
     if (confirm("해당 버전의 보고서 내용으로 덮어쓰시겠습니까?")) {
       setReportContent(content);
-      autoSaveAll(undefined, content, false);
+      if (refContent) setReferenceContent(refContent);
+      autoSaveAll(undefined, content, refContent, false);
       alert("이전 버전으로 복원되었습니다.");
     }
   }
@@ -565,7 +571,7 @@ function NewReportContent() {
                     <div style={{ color: "#cbd5e1" }}>생성: {new Date(v.createdAt).toLocaleString()}</div>
                     <div style={{ color: "#64748b", marginTop: "2px" }}>글 길이: {v.reportContent.length}자</div>
                   </div>
-                  <button onClick={() => handleRestoreVersion(v.reportContent)} style={{ background: "rgba(168, 85, 247, 0.15)", border: "1px solid rgba(168, 85, 247, 0.3)", color: "#c084fc", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  <button onClick={() => handleRestoreVersion(v.reportContent, v.referenceContent)} style={{ background: "rgba(168, 85, 247, 0.15)", border: "1px solid rgba(168, 85, 247, 0.3)", color: "#c084fc", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>
                     불러오기
                   </button>
                 </div>
@@ -587,8 +593,14 @@ function NewReportContent() {
               onFileUpload={handleDocumentUpload} onBulkUpdate={handleBulkUpdate} />
           )}
           {step === 4 && (
-            <Step5Report reportContent={reportContent} onChange={handleReportChange}
-              onGenerate={handleGenerate} onDownload={handleDownload} isGenerating={!!loadingState} lastSavedAt={lastSavedAt}
+            <Step5Report 
+              reportContent={reportContent}
+              referenceContent={referenceContent}
+              onChangeReport={handleReportChange}
+              onChangeReference={handleReferenceChange}
+              onGenerate={handleGenerate}
+              onDownload={handleDownload}
+              isGenerating={!!loadingState} lastSavedAt={lastSavedAt}
               tokenUsage={tokenUsage} generationMode={generationMode} />
           )}
 
@@ -651,7 +663,7 @@ function Step1Admin({
   const processFile = async (file: File) => {
     onFileUpload(file, "admin", (parsedData) => {
       onBulkUpdate(parsedData);
-      alert("✅ 문서 분석 완료! 행정 정보와 내담자 정보가 확인되었습니다.");
+      alert("✅ 문서 분석 완료! 상담 정보와 내담자 정보가 확인되었습니다.");
     });
   };
 
@@ -672,7 +684,7 @@ function Step1Admin({
   return (
     <>
       <div className={styles.stepHeader}>
-        <h2 className={styles.stepTitle}>행정 정보</h2>
+        <h2 className={styles.stepTitle}>상담 정보</h2>
         <p className={styles.stepDesc}>상담 진행 관련 기본 정보를 입력하세요</p>
       </div>
 
@@ -1189,7 +1201,9 @@ function Step4Session({
    ════════════════════════════════════════ */
 function Step5Report({
   reportContent,
-  onChange,
+  referenceContent,
+  onChangeReport,
+  onChangeReference,
   onGenerate,
   onDownload,
   isGenerating,
@@ -1198,21 +1212,25 @@ function Step5Report({
   generationMode,
 }: {
   reportContent: string;
-  onChange: (content: string) => void;
+  referenceContent?: string;
+  onChangeReport: (content: string) => void;
+  onChangeReference: (content: string) => void;
   onGenerate: () => void;
-  onDownload: (format: "txt" | "docx" | "md") => void;
+  onDownload: (format: "txt" | "docx" | "md", content: string, label: string) => void;
   isGenerating: boolean;
   lastSavedAt: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tokenUsage?: any;
   generationMode?: string;
 }) {
+  const [activeTab, setActiveTab] = useState<"reference" | "report">("report");
+
   return (
     <>
       <div className={styles.stepHeader}>
-        <h2 className={styles.stepTitle}>종합 보고서</h2>
+        <h2 className={styles.stepTitle}>종합 분석 결과 및 보고서</h2>
         <p className={styles.stepDesc}>
-          AI가 생성한 보고서를 검토하고 자유롭게 수정하세요. 내용은 실시간으로 자동 저장됩니다.
+          AI가 생성한 학술적 레퍼런스와 종합보고서를 검토하고 자유롭게 수정하세요. 학술적 근거 문서를 참조하며 공부할 수 있습니다.
         </p>
       </div>
 
@@ -1238,11 +1256,15 @@ function Step5Report({
             {reportContent ? "AI 보고서 재생성" : "AI 보고서 생성"}
           </button>
 
-          {reportContent && (
+          {(reportContent || referenceContent) && (
             <div style={{ display: "flex", gap: "var(--space-2)" }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => onDownload("docx")}
+                onClick={() => {
+                  const contentToDownload = activeTab === "report" ? reportContent : (referenceContent || "");
+                  const label = activeTab === "report" ? "최종보고서" : "학술근거";
+                  onDownload("docx", contentToDownload, label);
+                }}
                 style={{ display: "flex", alignItems: "center", gap: "6px" }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1250,14 +1272,7 @@ function Step5Report({
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                DOCX 형식
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => onDownload("txt")}
-                style={{ display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                텍스트 파일 
+                현재 탭 DOCX 다운로드
               </button>
             </div>
           )}
@@ -1273,12 +1288,50 @@ function Step5Report({
         )}
       </div>
 
+      {/* Tabs */}
+      {(reportContent || referenceContent) && (
+        <div style={{ display: "flex", gap: "8px", marginBottom: "var(--space-3)", borderBottom: "1px solid var(--border-color)", paddingBottom: "var(--space-3)" }}>
+          <button
+            onClick={() => setActiveTab("reference")}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "var(--radius-md)",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: "pointer",
+              border: activeTab === "reference" ? "1px solid var(--color-primary)" : "1px solid transparent",
+              backgroundColor: activeTab === "reference" ? "rgba(168, 85, 247, 0.1)" : "transparent",
+              color: activeTab === "reference" ? "var(--color-primary)" : "var(--color-text-muted)"
+            }}
+          >
+            📚 1부: 학술적 레퍼런스 분석서
+          </button>
+          <button
+            onClick={() => setActiveTab("report")}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "var(--radius-md)",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: "pointer",
+              border: activeTab === "report" ? "1px solid var(--color-primary)" : "1px solid transparent",
+              backgroundColor: activeTab === "report" ? "rgba(168, 85, 247, 0.1)" : "transparent",
+              color: activeTab === "report" ? "var(--color-primary)" : "var(--color-text-muted)"
+            }}
+          >
+            📝 2부: 슈퍼비전 종합보고서
+          </button>
+        </div>
+      )}
+
       {/* Editor */}
-      {reportContent ? (
+      {reportContent || referenceContent ? (
         <textarea
+          key={activeTab} // Force re-render on tab switch
           className="form-textarea"
-          value={reportContent}
-          onChange={(e) => onChange(e.target.value)}
+          value={activeTab === "report" ? reportContent : referenceContent || ""}
+          onChange={(e) => activeTab === "report" ? onChangeReport(e.target.value) : onChangeReference(e.target.value)}
+          placeholder={activeTab === "report" ? "종합보고서 내용이 비어있습니다." : "학술적 레퍼런스 내용이 비어있습니다."}
           style={{
             minHeight: "600px",
             fontFamily: "'Noto Sans KR', monospace",
