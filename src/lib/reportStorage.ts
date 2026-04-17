@@ -1,4 +1,5 @@
 import { ReportFormData, INITIAL_FORM_DATA } from "@/types/report";
+import { get, set } from "idb-keyval";
 
 export interface SavedReportVersion {
   reportContent: string;
@@ -35,11 +36,11 @@ function generateTitle(formData: ReportFormData): string {
   return "새 보고서";
 }
 
-export function cleanupTrash(): void {
+export async function cleanupTrash(): Promise<void> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = await get<SavedReport[]>(STORAGE_KEY);
     if (!raw) return;
-    let reports: SavedReport[] = JSON.parse(raw);
+    let reports = raw;
     const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     
@@ -55,26 +56,39 @@ export function cleanupTrash(): void {
     });
     
     if (hasChanges) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+      await set(STORAGE_KEY, reports);
     }
   } catch {
     // Ignore errors
   }
 }
 
-export function getAllReports(includeDeleted = false): SavedReport[] {
+export async function getAllReports(includeDeleted = false): Promise<SavedReport[]> {
   if (typeof window === "undefined") return [];
-  cleanupTrash();
+  await cleanupTrash();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    let reports: SavedReport[] = JSON.parse(raw);
-    
-    if (!includeDeleted) {
-      reports = reports.filter(r => !r.isDeleted);
+    let reports = await get<SavedReport[]>(STORAGE_KEY);
+    if (!reports) {
+      // Migration from localStorage if idb is empty
+      const oldRaw = localStorage.getItem(STORAGE_KEY);
+      if (oldRaw) {
+        reports = JSON.parse(oldRaw);
+        await set(STORAGE_KEY, reports);
+        localStorage.removeItem(STORAGE_KEY); // Clean up old storage to free 5MB block
+      } else {
+        return [];
+      }
     }
     
-    return reports.sort(
+    const validReports = reports || [];
+
+    if (!includeDeleted) {
+      return validReports.filter(r => !r.isDeleted).sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+    }
+    
+    return validReports.sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   } catch {
@@ -82,13 +96,12 @@ export function getAllReports(includeDeleted = false): SavedReport[] {
   }
 }
 
-export function getDeletedReports(): SavedReport[] {
+export async function getDeletedReports(): Promise<SavedReport[]> {
   if (typeof window === "undefined") return [];
-  cleanupTrash();
+  await cleanupTrash();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    let reports: SavedReport[] = JSON.parse(raw);
+    let reports = await get<SavedReport[]>(STORAGE_KEY);
+    if (!reports) return [];
     reports = reports.filter(r => !!r.isDeleted);
     return reports.sort(
       (a, b) => new Date(b.deletedAt || b.updatedAt).getTime() - new Date(a.deletedAt || a.updatedAt).getTime()
@@ -98,19 +111,19 @@ export function getDeletedReports(): SavedReport[] {
   }
 }
 
-export function getReport(id: string): SavedReport | null {
-  const reports = getAllReports(true);
+export async function getReport(id: string): Promise<SavedReport | null> {
+  const reports = await getAllReports(true);
   return reports.find((r) => r.id === id) ?? null;
 }
 
-export function saveReport(
+export async function saveReport(
   id: string | null,
   formData: ReportFormData,
   reportContent: string,
   referenceContent?: string,
   saveAsVersion = false
-): SavedReport {
-  const reports = getAllReports(true);
+): Promise<SavedReport> {
+  const reports = await getAllReports(true);
   const now = new Date().toISOString();
   const title = generateTitle(formData);
 
@@ -125,7 +138,7 @@ export function saveReport(
         newVersions = [{ reportContent: existing.reportContent, referenceContent: existing.referenceContent, createdAt: existing.updatedAt }, ...newVersions];
       }
 
-      reports[idx] = {
+      const updatedReport = {
         ...existing,
         title,
         formData,
@@ -136,8 +149,9 @@ export function saveReport(
         isDeleted: false,
         deletedAt: undefined
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
-      return reports[idx];
+      reports[idx] = updatedReport;
+      await set(STORAGE_KEY, reports);
+      return updatedReport;
     }
   }
 
@@ -153,38 +167,38 @@ export function saveReport(
     versions: []
   };
   reports.unshift(newReport);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+  await set(STORAGE_KEY, reports);
   return newReport;
 }
 
-export function moveToTrash(id: string): void {
-  const reports = getAllReports(true);
+export async function moveToTrash(id: string): Promise<void> {
+  const reports = await getAllReports(true);
   const idx = reports.findIndex(r => r.id === id);
   if (idx >= 0) {
     reports[idx].isDeleted = true;
     reports[idx].deletedAt = new Date().toISOString();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+    await set(STORAGE_KEY, reports);
   }
 }
 
-export function restoreReport(id: string): void {
-  const reports = getAllReports(true);
+export async function restoreReport(id: string): Promise<void> {
+  const reports = await getAllReports(true);
   const idx = reports.findIndex(r => r.id === id);
   if (idx >= 0) {
     reports[idx].isDeleted = false;
     reports[idx].deletedAt = undefined;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+    await set(STORAGE_KEY, reports);
   }
 }
 
-export function deleteReportPerm(id: string): void {
-  const reports = getAllReports(true).filter((r) => r.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+export async function deleteReportPerm(id: string): Promise<void> {
+  const reports = (await getAllReports(true)).filter((r) => r.id !== id);
+  await set(STORAGE_KEY, reports);
 }
 
 // Deprecated alias for backwards compatibility
 export const deleteReport = moveToTrash;
 
-export function createNewReport(): SavedReport {
-  return saveReport(null, INITIAL_FORM_DATA, "");
+export async function createNewReport(): Promise<SavedReport> {
+  return await saveReport(null, INITIAL_FORM_DATA, "");
 }

@@ -9,7 +9,7 @@ export default function TrashPage() {
   const [transcripts, setTranscripts] = useState<TranscriptRecord[]>([]);
   
   const loadData = async () => {
-    const r = getDeletedReports();
+    const r = await getDeletedReports();
     const t = await getDeletedTranscripts();
     setReports(r);
     setTranscripts(t);
@@ -21,10 +21,10 @@ export default function TrashPage() {
     return () => window.removeEventListener("reports-updated", loadData);
   }, []);
 
-  const handleRestoreReport = (id: string) => {
-    restoreReport(id);
+  const handleRestoreReport = async (id: string) => {
+    await restoreReport(id);
     window.dispatchEvent(new Event("reports-updated"));
-    loadData();
+    await loadData();
   };
 
   const handleRestoreTranscript = async (id: string) => {
@@ -32,11 +32,11 @@ export default function TrashPage() {
     await loadData();
   };
 
-  const handleDeleteReport = (id: string) => {
+  const handleDeleteReport = async (id: string) => {
     if (!confirm("이 보고서를 영구 삭제하시겠습니까? 복구할 수 없습니다.")) return;
-    deleteReportPerm(id);
+    await deleteReportPerm(id);
     window.dispatchEvent(new Event("reports-updated"));
-    loadData();
+    await loadData();
   };
 
   const handleDeleteTranscript = async (id: string) => {

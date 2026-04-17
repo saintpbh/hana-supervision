@@ -9,10 +9,13 @@ export default function Dashboard() {
   const [reports, setReports] = useState<SavedReport[]>([]);
 
   useEffect(() => {
-    setReports(getAllReports());
+    const fetchReports = async () => {
+      setReports(await getAllReports());
+    };
+    fetchReports();
     
     const handleUpdate = () => {
-      setReports(getAllReports());
+      fetchReports();
     };
     window.addEventListener("reports-updated", handleUpdate);
     return () => window.removeEventListener("reports-updated", handleUpdate);

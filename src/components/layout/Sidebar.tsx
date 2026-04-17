@@ -76,10 +76,12 @@ function SidebarContent() {
   });
 
   useEffect(() => {
-    // 렌더링 후 로컬스토리지 접근하여 hydration 에러 방지. 비동기식으로 실행하여 동기적 setState lint 방지
-    Promise.resolve().then(() => setReports(getAllReports()));
+    const fetchReports = async () => {
+      setReports(await getAllReports());
+    };
+    fetchReports();
     
-    const handler = () => setReports(getAllReports());
+    const handler = () => fetchReports();
     window.addEventListener("reports-updated", handler);
     return () => window.removeEventListener("reports-updated", handler);
   }, []);
@@ -119,9 +121,9 @@ function SidebarContent() {
     return () => window.removeEventListener("ai-instructions-updated", checkStatus);
   }, []);
 
-  function handleNewReport() {
-    const report = createNewReport();
-    setReports(getAllReports());
+  async function handleNewReport() {
+    const report = await createNewReport();
+    setReports(await getAllReports());
     router.push(`/report/new?id=${report.id}`);
   }
 

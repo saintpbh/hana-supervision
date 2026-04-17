@@ -312,11 +312,14 @@ async function runModelCall(modelType: string, customModel: string, prompt: stri
   }
 }
 
-async function executeQALoopAndPipeline(
+export const maxDuration = 300;
+
+async function executeQALoopAndPipelineStreaming(
   refModelType: string, refModel: string,
   qaModelType: string, qaModel: string,
   repModelType: string, repModel: string,
-  formData: ReportFormData, aiInstructions: AIInstructionsInput | null, keys: Record<string, string | undefined>
+  formData: ReportFormData, aiInstructions: AIInstructionsInput | null, keys: Record<string, string | undefined>,
+  sendEvent: (event: string, data: any) => void
 ) {
   const baseRefPrompt = buildReferencePrompt(formData, aiInstructions);
   const theoryInfo = aiInstructions?.counselingTheory || "일반 임상심리 이론";
@@ -332,13 +335,21 @@ async function executeQALoopAndPipeline(
       currentRefPrompt += `\n\n[이전 생성본 검수(QA) 강력 반려 사유! 반드시 이 피드백을 철저히 반영하여 할루시네이션을 수정/재작성할 것!!]\n${previousFeedback}`;
     }
 
-    // 1. Generate Reference
+    sendEvent("status", {
+      title: retries === 0 ? "1단계: 학술적 초안 작성 중..." : "2-1단계: 반박을 반영하여 재작성 중...",
+      desc: retries === 0 ? "방대한 심리 데이터의 학술적 근거 초안을 도출하고 있습니다." : "가혹하게 지적된 할루시네이션(거짓 정보)을 수정하고 있습니다."
+    });
+
     const refRes = await runModelCall(refModelType, refModel, currentRefPrompt, keys);
     const refText = refRes.text;
     totalUsage.prompt += refRes.promptTokens;
     totalUsage.completion += refRes.completionTokens;
 
-    // 2. QA Check
+    sendEvent("status", {
+      title: "2단계: QA 에이전트 팩트체크 진행 중...",
+      desc: "생성된 문서에 허위 인용이나 존재하지 않는 논문이 있는지 다른 AI가 평가하며 채점 중입니다."
+    });
+
     const qaPrompt = buildQAPrompt(refText, theoryInfo);
     const qaRes = await runModelCall(qaModelType, qaModel, qaPrompt, keys);
     totalUsage.prompt += qaRes.promptTokens;
@@ -359,12 +370,21 @@ async function executeQALoopAndPipeline(
   }
 
   // 3. Final Report Generation based on the QA-passed Reference
+  sendEvent("status", {
+    title: "3단계: 최종 종합보고서 작성 중...",
+    desc: "QA 검증을 통과한 학술적 레퍼런스를 바탕으로 현장 실무 수준의 종합보고서를 통합 작성하고 있습니다."
+  });
+
   const mainPrompt = buildMainReportPrompt(formData, aiInstructions, passedRefDoc);
   const repRes = await runModelCall(repModelType, repModel, mainPrompt, keys);
   totalUsage.prompt += repRes.promptTokens;
   totalUsage.completion += repRes.completionTokens;
 
-  return { reference: passedRefDoc, report: repRes.text, usage: totalUsage };
+  sendEvent("done", {
+    reference: passedRefDoc,
+    report: repRes.text,
+    usage: totalUsage
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -379,51 +399,78 @@ export async function POST(request: NextRequest) {
       anthropic: aiInstructions?.anthropicApiKey || process.env.ANTHROPIC_API_KEY,
     };
 
-    let result;
     let modeLabel = "";
-
     if (aiInstructions?.orchestrationMode === "multi") {
       modeLabel = "multi";
       if (!keys.gemini || !keys.openai || !keys.anthropic) {
-        throw new Error("멀티 에이전트 모드는 3가지 제공사 API Key가 모두 필요합니다.");
+        return NextResponse.json({ error: "멀티 에이전트 모드는 3가지 제공사 API Key가 모두 필요합니다." }, { status: 400 });
       }
-      // Ref: GPT-4o, QA: Claude-3.5-Sonnet, Report: Claude-3.5-Sonnet
-      result = await executeQALoopAndPipeline(
-        "openai", "gpt-4o",
-        "claude", "claude-3-5-sonnet-20241022",
-        "claude", "claude-3-5-sonnet-20241022",
-        formData, aiInstructions, keys
-      );
     } else if (aiInstructions?.orchestrationMode === "gemini-multi") {
       modeLabel = "gemini-multi";
-      const customModel = aiInstructions?.model || "gemini-3.1-pro-preview";
-      result = await executeQALoopAndPipeline(
-        "gemini", customModel,
-        "gemini", "gemini-2.0-flash", // Use flash for fast QA
-        "gemini", customModel,
-        formData, aiInstructions, keys
-      );
     } else {
       modeLabel = "single";
-      const customModel = aiInstructions?.model || "gemini-2.0-flash";
-      const modelType = customModel.startsWith("gpt-") ? "openai" : customModel.startsWith("claude-") ? "claude" : "gemini";
-      
-      result = await executeQALoopAndPipeline(
-        modelType, customModel,
-        modelType, customModel,
-        modelType, customModel,
-        formData, aiInstructions, keys
-      );
     }
 
-    return NextResponse.json({
-      reference: result.reference,
-      report: result.report,
-      usage: result.usage,
-      mode: modeLabel
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sendEvent = (event: string, data: any) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+
+        // 타임아웃 회피용 지속 핑(Ping) 전송
+        const pingInterval = setInterval(() => {
+          controller.enqueue(encoder.encode(`event: ping\ndata: {}\n\n`));
+        }, 15000);
+
+        try {
+          if (modeLabel === "multi") {
+            await executeQALoopAndPipelineStreaming(
+              "openai", "gpt-4o",
+              "claude", "claude-3-5-sonnet-20241022",
+              "claude", "claude-3-5-sonnet-20241022",
+              formData, aiInstructions, keys, sendEvent
+            );
+          } else if (modeLabel === "gemini-multi") {
+            const customModel = aiInstructions?.model || "gemini-3.1-pro-preview";
+            await executeQALoopAndPipelineStreaming(
+              "gemini", customModel,
+              "gemini", "gemini-2.0-flash",
+              "gemini", customModel,
+              formData, aiInstructions, keys, sendEvent
+            );
+          } else {
+            const customModel = aiInstructions?.model || "gemini-2.0-flash";
+            const modelType = customModel.startsWith("gpt-") ? "openai" : customModel.startsWith("claude-") ? "claude" : "gemini";
+            await executeQALoopAndPipelineStreaming(
+              modelType, customModel,
+              modelType, customModel,
+              modelType, customModel,
+              formData, aiInstructions, keys, sendEvent
+            );
+          }
+          sendEvent("finish", { mode: modeLabel });
+        } catch (err: unknown) {
+          console.error("Pipeline streaming error:", err);
+          const message = err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.";
+          sendEvent("error", { message });
+        } finally {
+          clearInterval(pingInterval);
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive"
+      }
     });
   } catch (err: unknown) {
-    console.error("Report generation error:", err);
+    console.error("Report generation boundary error:", err);
     const message = err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.";
     return NextResponse.json({ error: message }, { status: 500 });
   }

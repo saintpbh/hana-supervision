@@ -101,11 +101,11 @@ function NewReportContent() {
       "📋 작성 내용이 보존되었습니다",
     ];
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
+    saveTimerRef.current = setTimeout(async () => {
       const currentFd = fd ?? formData;
       const currentRc = rc ?? reportContent;
       const currentRefC = refC ?? referenceContent;
-      const saved = saveReport(reportId, currentFd, currentRc, currentRefC, saveAsVersion);
+      const saved = await saveReport(reportId, currentFd, currentRc, currentRefC, saveAsVersion);
       if (!reportId) {
         setReportId(saved.id);
         window.history.replaceState(null, "", `/report/new?id=${saved.id}`);
@@ -125,39 +125,42 @@ function NewReportContent() {
 
   /* ── load report on mount or when ID changes ── */
   useEffect(() => {
-    // URL의 파라미터를 최우선 기준으로 삼아 Stale State 차단
-    const currentId = searchParams.get("id");
-    
-    // 1. 기존 리포트 불러오기 모드
-    if (currentId) {
-      setReportId(currentId);
-      const existing = getReport(currentId);
-      if (existing) {
-        setFormData(existing.formData);
-        setReportContent(existing.reportContent || "");
-        setReferenceContent(existing.referenceContent || "");
-        setReportVersions(existing.versions || []);
-        return;
+    const loadState = async () => {
+      // URL의 파라미터를 최우선 기준으로 삼아 Stale State 차단
+      const currentId = searchParams.get("id");
+      
+      // 1. 기존 리포트 불러오기 모드
+      if (currentId) {
+        setReportId(currentId);
+        const existing = await getReport(currentId);
+        if (existing) {
+          setFormData(existing.formData);
+          setReportContent(existing.reportContent || "");
+          setReferenceContent(existing.referenceContent || "");
+          setReportVersions(existing.versions || []);
+          return;
+        }
       }
-    }
-    
-    // 2. 신규 리포트 생성 모드 (접속 시 ID가 없거나 DB에서 못 찾은 경우)
-    const fresh = createNewReport();
-    setReportId(fresh.id);
-    
-    // ✨ 핵심 누수 방지 로직: 이전 객체의 참조(Reference)를 끊음 (Deep Clone)
-    setFormData(JSON.parse(JSON.stringify(fresh.formData)));
-    setReportContent("");
-    setReferenceContent("");
-    setReportVersions([]);
-    
-    // 사용하지 않는 이전 로컬 스토리지 데이터들 강제 삭제 (Context Contamination 원천 차단)
-    localStorage.removeItem("hana_report_draft_fd");
-    localStorage.removeItem("hana_report_draft");
-    localStorage.removeItem("hana_reference_draft");
-    
-    router.replace(`/report/new?id=${fresh.id}`);
-    window.dispatchEvent(new Event("reports-updated"));
+      
+      // 2. 신규 리포트 생성 모드 (접속 시 ID가 없거나 DB에서 못 찾은 경우)
+      const fresh = await createNewReport();
+      setReportId(fresh.id);
+      
+      // ✨ 핵심 누수 방지 로직: 이전 객체의 참조(Reference)를 끊음 (Deep Clone)
+      setFormData(JSON.parse(JSON.stringify(fresh.formData)));
+      setReportContent("");
+      setReferenceContent("");
+      setReportVersions([]);
+      
+      // 사용하지 않는 이전 로컬 스토리지 데이터들 강제 삭제 (Context Contamination 원천 차단)
+      localStorage.removeItem("hana_report_draft_fd");
+      localStorage.removeItem("hana_report_draft");
+      localStorage.removeItem("hana_reference_draft");
+      
+      router.replace(`/report/new?id=${fresh.id}`);
+      window.dispatchEvent(new Event("reports-updated"));
+    };
+    loadState();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
@@ -369,68 +372,88 @@ function NewReportContent() {
       if (stored) aiInstructions = JSON.parse(stored);
     } catch {}
 
-    const isGeminiMultiMode = aiInstructions?.orchestrationMode === "gemini-multi";
-    
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    if (isGeminiMultiMode) {
-      setLoadingState({
-        title: "1단계: 학술적 초안 작성 중...",
-        desc: "초고속 모델이 방대한 심리 데이터의 학술적 근거 초안을 도출하고 있습니다."
-      });
-      let progressStep = 1;
-      intervalId = setInterval(() => {
-        progressStep++;
-        if (progressStep === 2) {
-          setLoadingState({
-            title: "2단계: QA 에이전트 팩트체크 진행 중...",
-            desc: "생성된 문서에 할루시네이션(거짓 정보)가 있는지 다른 AI 모델이 자체 채점과 검증을 진행합니다."
-          });
-        } else if (progressStep === 3) {
-          setLoadingState({
-            title: "2-1단계: 재작성 또는 최종 병합 중...",
-            desc: "할루시네이션 발견 시 재작성 루프를 돌며, 무사 통과 시 검증 리포트를 합칩니다."
-          });
-        } else if (progressStep === 5) {
-          setLoadingState({
-            title: "3단계: 종합보고서 작성 중...",
-            desc: "검증을 통과한 레퍼런스 문헌을 참조하여, 최종 종합보고서를 유려하게 통합 작성하고 있습니다."
-          });
-        }
-      }, 15000); 
-    } else {
-      setLoadingState({
-        title: "QA 검증 포함 듀얼 보고서 생성 중...",
-        desc: "[1단계]초안 도출 ➝ [2단계]할루시네이션 자가 검증(QA) ➝ [3단계]최종 보고서 작성\n이 파이프라인은 최소 1~2분 이상 소요될 수 있습니다."
-      });
-    }
+    setLoadingState({
+      title: "파이프라인 시작 대기 중...",
+      desc: "네트워크를 연결하고 AI 엔진을 초기화하고 있습니다."
+    });
 
     try {
       const res = await fetch("/api/generate-report", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
         body: JSON.stringify({ data: formData, aiInstructions }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "오류가 발생했습니다.");
-      setReferenceContent(data.reference);
-      setReportContent(data.report);
-      if (data.usage) setTokenUsage(data.usage);
-      if (data.mode) setGenerationMode(data.mode);
+
+      if (!res.ok || !res.body) {
+        let errMessage = "오류가 발생했습니다.";
+        try {
+          const errData = await res.json();
+          if (errData.error) errMessage = errData.error;
+        } catch {}
+        throw new Error(errMessage);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
       
-      localStorage.setItem("hana_reference_draft", data.reference);
-      localStorage.setItem("hana_report_draft", data.report);
-      autoSaveAll(formData, data.report, data.reference, true);
+      let finalReference = "";
+      let finalReport = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf("\n\n");
+        
+        while (boundary !== -1) {
+          const chunk = buffer.slice(0, boundary).trim();
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf("\n\n");
+
+          if (!chunk) continue;
+          
+          if (chunk.startsWith("event: ")) {
+            const lines = chunk.split("\n");
+            const eventType = lines[0].substring(7).trim();
+            const dataStr = lines[1]?.substring(6).trim();
+            
+            if (eventType === "ping") continue;
+
+            const data = dataStr ? JSON.parse(dataStr) : null;
+            
+            if (eventType === "status" && data) {
+              setLoadingState(data);
+            } else if (eventType === "done" && data) {
+              finalReference = data.reference;
+              finalReport = data.report;
+              setReferenceContent(data.reference);
+              setReportContent(data.report);
+              if (data.usage) setTokenUsage(data.usage);
+            } else if (eventType === "finish" && data) {
+              if (data.mode) setGenerationMode(data.mode);
+            } else if (eventType === "error") {
+              throw new Error(data?.message || "서버 에러가 발생했습니다.");
+            }
+          }
+        }
+      }
       
-      setLastSavedAt(nowTime());
-      setSaveMessage("🎉 두 개의 보고서가 생성되고 이전 버전이 보존되었습니다!");
-      if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
-      msgTimerRef.current = setTimeout(() => setSaveMessage(null), 5000);
+      if (finalReference && finalReport) {
+        localStorage.setItem("hana_reference_draft", finalReference);
+        localStorage.setItem("hana_report_draft", finalReport);
+        autoSaveAll(formData, finalReport, finalReference, true);
+        
+        setLastSavedAt(nowTime());
+        setSaveMessage("🎉 두 개의 보고서가 생성되고 DB 및 버전에 보존되었습니다!");
+        if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+        msgTimerRef.current = setTimeout(() => setSaveMessage(null), 5000);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "오류가 발생했습니다.";
       alert(message);
     } finally {
-      if (intervalId) clearInterval(intervalId);
       setLoadingState(null);
     }
   }
