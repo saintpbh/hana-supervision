@@ -44,6 +44,7 @@ interface AIInstructionsInput {
   transcriptDirection?: string;
   customPrompt?: string;
   orchestrationMode?: string;
+  reportStyleLevel?: number;
 }
 
 function buildBaseData(data: ReportFormData): string {
@@ -79,25 +80,63 @@ ${mmpiFormatted}
 `;
 }
 
+function getRefDepthInstructions(level: number): { roleDesc: string; volumeGuide: string; detailGuide: string } {
+  switch (level) {
+    case 1:
+      return {
+        roleDesc: "숙련된 임상 슈퍼바이저",
+        volumeGuide: "핵심 근거만 간결하게 요약하세요. (목표: 3~5장 분량의 요약 분석서)",
+        detailGuide: "학술 논문 인용은 최소화하고, 핵심 임상 판단의 근거만 간략히 정리하세요. 실무에 즉시 활용 가능한 수준으로 작성하세요."
+      };
+    case 2:
+      return {
+        roleDesc: "경험 풍부한 임상심리전문가 슈퍼바이저",
+        volumeGuide: "주요 판단에 대한 이론적 근거를 간략히 포함하세요. (목표: 5~10장 분량)",
+        detailGuide: "각 핵심 판단에 대해 1~2줄의 이론적 배경을 병기하되, 과도한 학술적 논의는 지양하세요."
+      };
+    case 3:
+      return {
+        roleDesc: "최고 수준의 임상심리전문가 슈퍼바이저",
+        volumeGuide: "실무적 분석과 학술적 근거를 균형 있게 서술하세요. (목표: 10~15장 분량)",
+        detailGuide: "심리검사 교차분석과 핵심 이론적 근거를 포함하되, 각 섹션이 지나치게 길어지지 않도록 균형을 유지하세요."
+      };
+    case 4:
+      return {
+        roleDesc: "심리학 분야의 석학급 임상심리전문가 슈퍼바이저",
+        volumeGuide: "학술적 깊이를 강화하여 상세하게 분석하세요. (목표: 15~20장 분량의 심도 있는 분석서)",
+        detailGuide: "심리검사의 교차분석, 방어기제의 발현 형태, 내담자 호소 문제의 기원 등에 대해 학술적 문헌 근거를 상세히 기술하세요."
+      };
+    case 5:
+    default:
+      return {
+        roleDesc: "심리학 및 상담 분야의 세계적인 석학이자 최고 수준의 임상심리전문가 슈퍼바이저",
+        volumeGuide: "분량 제한 없이 출력 가능한 최대 분량으로 매우 친절하고, 논리적이고, 자세하게 설명하세요. (목표: 20~30장 분량의 심도 있는 보고서)",
+        detailGuide: "각 판단마다 어떤 심리학적 이론, 학술적 문헌이 뒷받침되는지 명확한 레퍼런스 설명과 소제목을 동반하여 기술하세요. 이 문서는 상담자가 자신의 임상적 판단이 왜 도출되었는지 이유를 문단별로 세세하게 공부할 수 있는 최고 수준의 학술적 해설서 역할을 해야 합니다."
+      };
+  }
+}
+
 function buildReferencePrompt(data: ReportFormData, ai: AIInstructionsInput | null): string {
   const theory = ai?.counselingTheory || "전문 진단 및 일반 심리상담 이론";
   const baseData = buildBaseData(data);
-  return `당신은 심리학 및 상담 분야의 세계적인 석학이자 최고 수준의 임상심리전문가 슈퍼바이저입니다.
-제공되는 내담자 데이터와 상담 기록을 바탕으로, **박사 논문 수준 이상으로 압도적으로 상세하고 깊이 있는 학술적 레퍼런스 문서(판단의 근거와 학문적 근거 종합 분석서)**를 작성해야 합니다. 
-분량 제한 없이 출력 가능한 최대 분량으로 매우 친절하고, 논리적이고, 자세하게 설명하세요. (목표: 20~30장 분량의 심도 있는 보고서)
+  const level = ai?.reportStyleLevel || 3;
+  const depth = getRefDepthInstructions(level);
+
+  return `당신은 ${depth.roleDesc}입니다.
+제공되는 내담자 데이터와 상담 기록을 바탕으로, **판단의 근거와 학문적 근거 종합 분석서(레퍼런스 문서)**를 작성해야 합니다.
+${depth.volumeGuide}
 
 ## [분석 지침]
 - 중점 적용 상담 이론: **${theory}**
 - 사례 개념화 방향: ${ai?.direction || "제공되지 않음"}
 - 추가 커스텀 지시사항: ${ai?.customPrompt || "제공되지 않음"}
-- 이 문서는 상담자가 자신의 임상적 판단이 왜 도출되었는지 이유를 문단별로 세세하게 공부할 수 있는 최고 수준의 학술적 해설서 역할을 해야 합니다.
-- 심리검사의 교차분석, 방어기제의 발현 형태, 내담자 호소 문제의 기원 등에 대해 각 판단마다 어떤 심리학적 이론, 학술적 문헌이 뒷받침되는지 명확한 레퍼런스 설명과 소제목을 동반하여 기술하세요.
+- ${depth.detailGuide}
 
 ==================================================
 ${baseData}
 ==================================================
 
-위 데이터를 통해 다음 항목들에 대해 완벽하고 논리적인 전공 서적 수준의 분석서(Reference)를 마크다운으로 출력하세요.
+위 데이터를 통해 다음 항목들에 대해 분석서(Reference)를 마크다운으로 출력하세요.
 ## 1. 심리검사(SCT, MMPI-2, TCI) 다면 교차 분석 및 학술적 근거
 ## 2. 내담자의 방어기제, 핵심 갈등, 대인관계 양상에 대한 심층적 고찰
 ## 3. 주 호소 문제의 발달사적 기원과 유지 요인 분석
@@ -126,19 +165,79 @@ ${referenceDoc}
 `;
 }
 
+function getReportStyleInstructions(level: number): { toneGuide: string; citationRule: string; formatNotes: string } {
+  switch (level) {
+    case 1:
+      return {
+        toneGuide: `## [작성 스타일 지침: 실무 사례보고서]
+- 이 보고서는 **슈퍼비전 제출용 사례보고서**입니다. 학술적 어투가 아닌, 실무 현장에서 즉시 활용 가능한 간결하고 명료한 문체로 작성하세요.
+- 불필요한 학술 용어 나열을 지양하고, 임상적 관찰과 판단을 핵심 위주로 서술하세요.
+- 각 섹션은 짧고 핵심적으로 작성하세요.`,
+        citationRule: "학술적 참조 표기([Ref:])는 사용하지 마세요. 필요한 경우 괄호 안에 간략한 이론명만 언급하세요.",
+        formatNotes: "전체 분량을 간결하게 유지하세요. 각 섹션은 핵심 내용 위주로 1~3 문단 이내로 작성합니다."
+      };
+    case 2:
+      return {
+        toneGuide: `## [작성 스타일 지침: 사례 중심 분석]
+- 사례보고서 형식을 기본으로 하되, 주요 임상 판단에 대해 간략한 이론적 배경(1~2줄)을 병기하세요.
+- 실무적이고 읽기 쉬운 문체를 유지하면서, 왜 그런 판단을 했는지 근거를 짧게 덧붙이세요.`,
+        citationRule: "[Ref:] 형식의 인용 표기는 사용하지 않습니다. 대신 필요한 곳에 '~이론에 따르면' 또는 '~관점에서 볼 때' 정도로 자연스럽게 이론을 언급하세요.",
+        formatNotes: "적정 분량을 유지하세요. 가독성을 최우선으로 합니다."
+      };
+    case 3:
+      return {
+        toneGuide: `## [작성 스타일 지침: 균형 보고서]
+- 실무적 보고서 구조를 유지하면서, 각 섹션에 학술적 해석과 이론적 근거를 균형 있게 포함하세요.
+- 지나치게 학문적이지도, 지나치게 간략하지도 않은 중간 톤을 유지하세요.`,
+        citationRule: "심리검사 분석과 사례개념화 섹션에서 주요 해석에 대해 [Ref:] 인용 표기를 선택적으로 사용하세요. 모든 문장에 인용을 달 필요는 없습니다.",
+        formatNotes: "각 섹션을 적절한 분량으로 서술하세요. 핵심 판단에는 근거를, 명확한 사실에는 간결한 서술을 적용합니다."
+      };
+    case 4:
+      return {
+        toneGuide: `## [작성 스타일 지침: 심층 분석 보고서]
+- 학술적 깊이를 강화한 보고서입니다. 심리검사 교차분석, 방어기제 논의, 발달사적 맥락 등을 전공서적 수준으로 상세히 서술하세요.
+- 임상적 소견마다 이론적 근거를 충실히 기술하세요.`,
+        citationRule: "종합보고서에서 심층 해석이나 임상적 소견을 서술할 때는 레퍼런스를 참조 표시(예: [Ref: 1. MMPI-2 다면 분석]) 형태로 기재하세요.",
+        formatNotes: "충분한 분량으로 깊이 있게 작성하세요. 각 섹션에서 이론적 근거를 충실히 전개합니다."
+      };
+    case 5:
+    default:
+      return {
+        toneGuide: `## [작성 스타일 지침: 학술 논문 수준]
+- 박사 논문 수준의 학술적 깊이를 갖춘 종합보고서를 작성하세요.
+- 모든 임상적 판단과 해석에 학술적 근거를 철저하게 연결하세요.`,
+        citationRule: "**가장 중요한 규칙**: 종합보고서에서 심층 해석이나 임상적 소견을 서술할 때는, 항상 결과의 이유에 해당하는 레퍼런스를 참조 표시(예: [Ref: 1. MMPI-2 다면 분석] 또는 [Ref: 방어기제 챕터]) 형태로 기재하세요. 이를 통해 상담자가 종합보고서를 바탕으로 학술적 레퍼런스 문서를 즉시 찾아가 같이 공부할 수 있도록 해야 합니다.",
+        formatNotes: "분량 제한 없이 최대한 상세하게 작성하세요. 학술적으로 압도적인 깊이를 보여주세요."
+      };
+  }
+}
+
 function buildMainReportPrompt(data: ReportFormData, ai: AIInstructionsInput | null, referenceOutput: string): string {
   const role = ai?.rolePersona || "한국심리학회 기준 1급 상담심리사이자 10년 이상의 임상 경력을 가진 '전문 상담 슈퍼바이저'입니다.";
   const theory = ai?.counselingTheory || "전문 진단 및 일반 심리상담 이론";
   const baseData = buildBaseData(data);
+  const level = ai?.reportStyleLevel || 3;
+  const style = getReportStyleInstructions(level);
+
+  // 레벨 1~2에서는 [Ref:] 인용이 들어간 섹션 양식 라벨을 조정
+  const section4Label = level <= 2
+    ? "### 4. 심리검사 종합 분석 결과"
+    : "### 4. 심리검사 종합 분석 결과 (반드시 [Ref: ~] 인용 표기 포함)";
+  const section5Label = level <= 2
+    ? "### 5. 종합 사례개념화"
+    : "### 5. 종합 사례개념화 (반드시 [Ref: ~] 인용 표기 포함)";
 
   return `당신은 ${role}입니다.
 
 당신은 방금 전담 QA 에이전트의 검수를 통과한 **[학술적 레퍼런스 및 근거 해설서]**를 완벽하게 숙지하고, 이를 바탕으로 내담자 원본 데이터와 함께 최종 **[슈퍼비전 종합보고서]**를 작성해야 합니다.
 
+${style.toneGuide}
+
 ## [중요 지침]
 - 중점 적용 상담 이론: **${theory}**
 - 축어록 요약 방향: ${ai?.transcriptDirection || "제공되지 않음"}
-- **가장 중요한 규칙**: 종합보고서에서 심층 해석이나 임상적 소견을 서술할 때는, 항상 결과의 이유에 해당하는 레퍼런스를 참조 표시(예: \`[Ref: 1. MMPI-2 다면 분석]\` 또는 \`[Ref: 방어기제 챕터]\`) 형태로 기재하세요. 이를 통해 상담자가 종합보고서를 바탕으로 학술적 레퍼런스 문서를 즉시 찾아가 같이 공부할 수 있도록 해야 합니다. 
+- ${style.citationRule}
+- ${style.formatNotes}
 
 ==================================================
 ## [학술적 레퍼런스 및 근거 해설서]
@@ -155,8 +254,8 @@ ${baseData}
 (상담자: ${data.adminInfo.counselorName}, 소속: ${data.adminInfo.organization}, 슈퍼바이저: ${data.adminInfo.supervisorName}, 일시: ${data.adminInfo.sessionDate}, 장소: ${data.adminInfo.location})
 ### 2. 내담자 정보 및 주 호소 문제 요약
 ### 3. 상담 내용 및 회기 요약 
-### 4. 심리검사 종합 분석 결과 (반드시 [Ref: ~] 인용 표기 포함)
-### 5. 종합 사례개념화 (반드시 [Ref: ~] 인용 표기 포함)
+${section4Label}
+${section5Label}
 ### 6. 슈퍼바이저 피드백 및 치료적 제안
 ---
 출력 형식 지침: Markdown 형식으로 출력 (제목은 ## 또는 ### 사용). 한국어로 작성. 결과물에 [인공지능 지침]이라는 지시문 텍스트가 노골적으로 드러나지 않도록 유려하게 서술하세요.

@@ -12,6 +12,7 @@ export interface AIInstructions {
   transcriptDirection: string;
   customPrompt?: string;
   orchestrationMode: "single" | "multi" | "gemini-multi";
+  reportStyleLevel: 1 | 2 | 3 | 4 | 5;
 }
 
 export const DEFAULT_AI_INSTRUCTIONS: AIInstructions = {
@@ -25,6 +26,7 @@ export const DEFAULT_AI_INSTRUCTIONS: AIInstructions = {
   transcriptDirection: "상담자의 공감적 반응, 반영 기법의 적절성 및 내담자의 비언어적 뉘앙스 변화에 주목하여 분석해 주세요.",
   customPrompt: "평가 시, 각 심리검사 지표들 간의 모순점이나 연관성을 적극적으로 교차 해석해야 합니다.",
   orchestrationMode: "single",
+  reportStyleLevel: 3,
 };
 
 function loadFromStorage(): AIInstructions {

@@ -216,9 +216,140 @@ export default function AIInstructionsPage() {
           />
         </div>
 
-        {/* 4. Custom Prompt */}
+        {/* 4. Report Style Level */}
         <div style={{ marginBottom: "var(--space-8)" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>4. 커스텀 지시사항 (선택사항)</h2>
+          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>4. 보고서 작성 스타일</h2>
+          <p className="form-hint" style={{ marginBottom: "var(--space-4)" }}>
+            최종 보고서의 학술적 깊이를 조절합니다. 슈퍼비전 제출용 사례보고서부터 학술 논문 수준까지 선택할 수 있습니다.
+          </p>
+
+          {(() => {
+            const levels = [
+              { level: 1 as const, label: "실무 사례보고서", emoji: "📋", desc: "슈퍼비전 제출용. 간결하고 명료한 실무 양식. 학술 인용 최소화, 사례개념화 중심." },
+              { level: 2 as const, label: "사례 중심 분석", emoji: "📝", desc: "사례보고서 기반이지만, 주요 판단에 간략한 이론적 근거(1~2줄)를 병기합니다." },
+              { level: 3 as const, label: "균형 보고서", emoji: "⚖️", desc: "실무적 구조를 유지하면서 각 섹션에 학술적 해석 문단을 병행합니다." },
+              { level: 4 as const, label: "심층 분석 보고서", emoji: "🔬", desc: "학술적 깊이 강화. 교차분석, 방어기제 논의 등 전공서적 수준의 해설을 포함합니다." },
+              { level: 5 as const, label: "학술 논문 수준", emoji: "🎓", desc: "박사 논문급 분량과 깊이. [Ref:] 인용 표기를 전면 적용한 학술적 보고서." },
+            ];
+            const currentLevel = localData.reportStyleLevel || 3;
+            const currentInfo = levels.find(l => l.level === currentLevel) || levels[2];
+
+            return (
+              <div>
+                {/* Slider track */}
+                <div style={{ position: "relative", padding: "var(--space-4) 0" }}>
+                  {/* Background track */}
+                  <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "10%",
+                    right: "10%",
+                    height: "4px",
+                    background: "rgba(255,255,255,0.08)",
+                    borderRadius: "2px",
+                    transform: "translateY(-50%)",
+                  }} />
+                  {/* Active track */}
+                  <div style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "10%",
+                    width: `${((currentLevel - 1) / 4) * 80}%`,
+                    height: "4px",
+                    background: "linear-gradient(90deg, #22c55e, #3b82f6, #a855f7)",
+                    borderRadius: "2px",
+                    transform: "translateY(-50%)",
+                    transition: "width 0.3s ease",
+                  }} />
+
+                  {/* Step circles */}
+                  <div style={{ display: "flex", justifyContent: "space-between", position: "relative", padding: "0 10%" }}>
+                    {levels.map((l) => {
+                      const isActive = l.level === currentLevel;
+                      const isPast = l.level < currentLevel;
+                      return (
+                        <button
+                          key={l.level}
+                          onClick={() => setLocalData({ ...localData, reportStyleLevel: l.level })}
+                          style={{
+                            width: isActive ? "44px" : "36px",
+                            height: isActive ? "44px" : "36px",
+                            borderRadius: "50%",
+                            border: isActive ? "2px solid var(--color-primary)" : isPast ? "2px solid rgba(168, 85, 247, 0.4)" : "2px solid rgba(255,255,255,0.15)",
+                            background: isActive
+                              ? "linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(59, 130, 246, 0.3))"
+                              : isPast
+                                ? "rgba(168, 85, 247, 0.1)"
+                                : "rgba(255,255,255,0.05)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: isActive ? "18px" : "14px",
+                            transition: "all 0.25s ease",
+                            transform: isActive ? "scale(1.1)" : "scale(1)",
+                            boxShadow: isActive ? "0 0 16px rgba(168, 85, 247, 0.3)" : "none",
+                          }}
+                          title={l.label}
+                        >
+                          {l.emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Level labels below */}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "var(--space-1) 5% 0", marginTop: "var(--space-1)" }}>
+                  {levels.map((l) => (
+                    <div
+                      key={l.level}
+                      onClick={() => setLocalData({ ...localData, reportStyleLevel: l.level })}
+                      style={{
+                        textAlign: "center",
+                        width: "20%",
+                        cursor: "pointer",
+                        fontSize: "11px",
+                        fontWeight: l.level === currentLevel ? 700 : 400,
+                        color: l.level === currentLevel ? "var(--color-primary)" : "var(--color-text-muted)",
+                        transition: "all 0.2s ease",
+                        lineHeight: "1.3",
+                      }}
+                    >
+                      {l.label}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Current selection detail card */}
+                <div style={{
+                  marginTop: "var(--space-5)",
+                  padding: "var(--space-4)",
+                  background: "linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(59, 130, 246, 0.06))",
+                  border: "1px solid rgba(168, 85, 247, 0.2)",
+                  borderRadius: "var(--radius-lg)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "var(--space-3)",
+                }}>
+                  <span style={{ fontSize: "24px", flexShrink: 0 }}>{currentInfo.emoji}</span>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--color-primary)", marginBottom: "4px" }}>
+                      Lv.{currentLevel} — {currentInfo.label}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "var(--color-text-muted)", lineHeight: "1.6" }}>
+                      {currentInfo.desc}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* 5. Custom Prompt */}
+        <div style={{ marginBottom: "var(--space-8)" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "var(--space-4)" }}>5. 커스텀 지시사항 (선택사항)</h2>
           <p className="form-hint" style={{ marginBottom: "var(--space-3)" }}>
             슈퍼바이저로서 AI에게 전달할 추가 규칙이 있다면 자유롭게 적어주세요.
           </p>
