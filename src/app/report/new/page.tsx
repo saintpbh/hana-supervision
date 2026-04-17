@@ -11,6 +11,8 @@ import { SCT_QUESTIONS, MMPI2_SCALES } from "@/constants/report";
 import { getReport, saveReport, createNewReport } from "@/lib/reportStorage";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const STEPS = [
   { title: "상담 정보", desc: "상담자, 기관, 슈퍼바이저" },
@@ -1248,6 +1250,34 @@ function Step5Report({
   generationMode?: string;
 }) {
   const [activeTab, setActiveTab] = useState<"reference" | "report">("report");
+  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
+  const [showSettings, setShowSettings] = useState(false);
+  const [tempTheory, setTempTheory] = useState("");
+  const [tempLevel, setTempLevel] = useState(5);
+
+  useEffect(() => {
+    if (showSettings) {
+      try {
+        const stored = localStorage.getItem("hana_ai_instructions");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setTempTheory(parsed.counselingTheory || "");
+          setTempLevel(parsed.reportLevel || 5);
+        }
+      } catch {}
+    }
+  }, [showSettings]);
+
+  const applySettings = () => {
+    try {
+      const stored = localStorage.getItem("hana_ai_instructions");
+      const parsed = stored ? JSON.parse(stored) : {};
+      parsed.counselingTheory = tempTheory;
+      parsed.reportLevel = tempLevel;
+      localStorage.setItem("hana_ai_instructions", JSON.stringify(parsed));
+      setShowSettings(false);
+    } catch {}
+  };
 
   return (
     <>
@@ -1278,6 +1308,14 @@ function Step5Report({
               <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
             {reportContent ? "AI 보고서 재생성" : "AI 보고서 생성"}
+          </button>
+          
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowSettings(true)}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            ⚙️ 즉석 수준 튜닝
           </button>
 
           {(reportContent || referenceContent) && (
@@ -1345,26 +1383,67 @@ function Step5Report({
           >
             📝 2부: 슈퍼비전 종합보고서
           </button>
+          
+          <div style={{ marginLeft: "auto", display: "flex", gap: "4px", background: "var(--gray-100)", padding: "4px", borderRadius: "var(--radius-md)" }}>
+            <button
+              onClick={() => setViewMode("preview")}
+              style={{
+                padding: "4px 12px",
+                fontSize: "13px",
+                fontWeight: viewMode === "preview" ? 700 : 500,
+                borderRadius: "var(--radius-sm)",
+                background: viewMode === "preview" ? "white" : "transparent",
+                color: viewMode === "preview" ? "var(--gray-900)" : "var(--gray-500)",
+                boxShadow: viewMode === "preview" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+                border: "none", cursor: "pointer"
+              }}
+            >
+              📖 읽기용 뷰어
+            </button>
+            <button
+              onClick={() => setViewMode("edit")}
+              style={{
+                padding: "4px 12px",
+                fontSize: "13px",
+                fontWeight: viewMode === "edit" ? 700 : 500,
+                borderRadius: "var(--radius-sm)",
+                background: viewMode === "edit" ? "white" : "transparent",
+                color: viewMode === "edit" ? "var(--gray-900)" : "var(--gray-500)",
+                boxShadow: viewMode === "edit" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+                border: "none", cursor: "pointer"
+              }}
+            >
+              ⌨️ 원문 편집
+            </button>
+          </div>
         </div>
       )}
 
       {/* Editor */}
       {reportContent || referenceContent ? (
-        <textarea
-          key={activeTab} // Force re-render on tab switch
-          className="form-textarea"
-          value={activeTab === "report" ? reportContent : referenceContent || ""}
-          onChange={(e) => activeTab === "report" ? onChangeReport(e.target.value) : onChangeReference(e.target.value)}
-          placeholder={activeTab === "report" ? "종합보고서 내용이 비어있습니다." : "학술적 레퍼런스 내용이 비어있습니다."}
-          style={{
-            minHeight: "600px",
-            fontFamily: "'Noto Sans KR', monospace",
-            fontSize: "14px",
-            lineHeight: "1.8",
-            whiteSpace: "pre-wrap",
-            resize: "vertical",
-          }}
-        />
+        viewMode === "preview" ? (
+          <div className="markdown-preview glass-card" style={{ padding: "var(--space-6)", minHeight: "600px", background: "#fff", color: "#111", border: "1px solid var(--border-color)", overflowY: "auto" }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {activeTab === "report" ? reportContent : (referenceContent || "")}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <textarea
+            key={activeTab} // Force re-render on tab switch
+            className="form-textarea"
+            value={activeTab === "report" ? reportContent : referenceContent || ""}
+            onChange={(e) => activeTab === "report" ? onChangeReport(e.target.value) : onChangeReference(e.target.value)}
+            placeholder={activeTab === "report" ? "종합보고서 내용이 비어있습니다." : "학술적 레퍼런스 내용이 비어있습니다."}
+            style={{
+              minHeight: "600px",
+              fontFamily: "'Noto Sans KR', monospace",
+              fontSize: "14px",
+              lineHeight: "1.8",
+              whiteSpace: "pre-wrap",
+              resize: "vertical",
+            }}
+          />
+        )
       ) : (
         <div style={{
           border: "2px dashed var(--color-border)",
@@ -1415,6 +1494,31 @@ function Step5Report({
               <div style={{ fontSize: "13px" }}>생성된 텍스트 토큰: <strong>{tokenUsage.completion?.toLocaleString()}</strong></div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI Settings Modal */}
+      {showSettings && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="glass-card" style={{ width: "400px", padding: "var(--space-6)" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "var(--space-4)" }}>⚙️ AI 상세 지침 즉석 조정</h3>
+            <div className="form-group">
+              <label className="form-label">해석 이론 근거 변경</label>
+              <input type="text" className="form-input" value={tempTheory} onChange={e => setTempTheory(e.target.value)} placeholder="예: 대상관계이론, 인지행동치료..." />
+            </div>
+            <div className="form-group" style={{ marginTop: "16px" }}>
+              <label className="form-label">학술 및 전문성 수준: Level {tempLevel}</label>
+              <input type="range" min="1" max="5" value={tempLevel} onChange={e => setTempLevel(Number(e.target.value))} style={{ width: "100%", marginTop: "8px" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--gray-500)", marginTop: "4px" }}>
+                <span>실무 리포트 지향</span>
+                <span>전문 학술 논문 지향</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginTop: "24px" }}>
+              <button className="btn" style={{ flex: 1, backgroundColor: "var(--gray-200)" }} onClick={() => setShowSettings(false)}>취소</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={applySettings}>저장 후 닫기</button>
+            </div>
+          </div>
         </div>
       )}
     </>
