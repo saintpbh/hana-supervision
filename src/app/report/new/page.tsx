@@ -125,38 +125,39 @@ function NewReportContent() {
 
   /* ── load report on mount or when ID changes ── */
   useEffect(() => {
-    const draftFd = localStorage.getItem("hana_report_draft_fd");
-    if (!reportId && draftFd) {
-      try { setFormData(JSON.parse(draftFd)); } catch {}
-    }
-    const draftRc = localStorage.getItem("hana_report_draft");
-    if (!reportId && draftRc) {
-      setReportContent(draftRc);
-    }
-    const draftRef = localStorage.getItem("hana_reference_draft");
-    if (!reportId && draftRef) {
-      setReferenceContent(draftRef);
-    }
-
-    if (reportId) {
-      const existing = getReport(reportId);
+    // URL의 파라미터를 최우선 기준으로 삼아 Stale State 차단
+    const currentId = searchParams.get("id");
+    
+    // 1. 기존 리포트 불러오기 모드
+    if (currentId) {
+      setReportId(currentId);
+      const existing = getReport(currentId);
       if (existing) {
         setFormData(existing.formData);
-        setReportContent(existing.reportContent);
-        if (existing.referenceContent) setReferenceContent(existing.referenceContent);
-        if (existing.versions) setReportVersions(existing.versions);
+        setReportContent(existing.reportContent || "");
+        setReferenceContent(existing.referenceContent || "");
+        setReportVersions(existing.versions || []);
         return;
       }
     }
-    // No ID or not found → create new
-    if (!reportId) {
-      const fresh = createNewReport();
-      setReportId(fresh.id);
-      setFormData(fresh.formData);
-      setReportContent("");
-      router.replace(`/report/new?id=${fresh.id}`);
-      window.dispatchEvent(new Event("reports-updated"));
-    }
+    
+    // 2. 신규 리포트 생성 모드 (접속 시 ID가 없거나 DB에서 못 찾은 경우)
+    const fresh = createNewReport();
+    setReportId(fresh.id);
+    
+    // ✨ 핵심 누수 방지 로직: 이전 객체의 참조(Reference)를 끊음 (Deep Clone)
+    setFormData(JSON.parse(JSON.stringify(fresh.formData)));
+    setReportContent("");
+    setReferenceContent("");
+    setReportVersions([]);
+    
+    // 사용하지 않는 이전 로컬 스토리지 데이터들 강제 삭제 (Context Contamination 원천 차단)
+    localStorage.removeItem("hana_report_draft_fd");
+    localStorage.removeItem("hana_report_draft");
+    localStorage.removeItem("hana_reference_draft");
+    
+    router.replace(`/report/new?id=${fresh.id}`);
+    window.dispatchEvent(new Event("reports-updated"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
